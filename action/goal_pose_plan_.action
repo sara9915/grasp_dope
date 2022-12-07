@@ -1,8 +1,9 @@
 #goal definition
-geometry_msgs/Pose goal_pose
+geometry_msgs/PoseStamped goal_pose_pick
+geometry_msgs/PoseStamped goal_pose_place
 ---
 #result definition
 bool success
 --- 
 #feedback definition
-float64 feedback
+bool pick_status

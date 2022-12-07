@@ -67,7 +67,7 @@ void buildScene() {
   // COSTRUISCO LA SCENA
 
   double Table_DX = 0.85;
-  double Table_DY = 0.65;
+  double Table_DY = 1.20; //0.65
   double Table_DZ = 0.80;
   double container_spessore = 0.005;
   double container_larghezza = 0.50;
@@ -82,7 +82,7 @@ void buildScene() {
     pose.header.frame_id = "world";
     pose.pose.orientation.w = 1.0;
     pose.pose.position.x = Table_DX/4;
-    pose.pose.position.y = 0;
+    pose.pose.position.y = 0.15; //0
     pose.pose.position.z = -Table_DZ/2;
     addBOX(*planning_scene_interface, Table_DX, Table_DY, Table_DZ, pose,
           "obst_1");

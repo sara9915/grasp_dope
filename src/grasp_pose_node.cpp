@@ -70,19 +70,14 @@ void calculate_pose(const geometry_msgs::PoseStamped::ConstPtr& obj_pose)
 
 
   /* Calculating grasp pose */
-  Eigen::Matrix3d rotation_grasp_pose;
-  rotation_grasp_pose << 0, -1, 0,
-                        -1, 0, 0,
-                        0, 0, -1;
-  Eigen::Quaterniond orientation_grasp_pose(rotation_grasp_pose);
-  double offset_z = 0.10;
+  Eigen::Quaterniond orientation_grasp_pose(T_OB.rotation());
 
   geometry_msgs::PoseStamped grasp_pose_msg;
   grasp_pose_msg.header.stamp = ros::Time::now();
   grasp_pose_msg.header.frame_id = "base_link";
   grasp_pose_msg.pose.position.x = T_OB.translation().x();
   grasp_pose_msg.pose.position.y = T_OB.translation().y();
-  grasp_pose_msg.pose.position.z = T_OB.translation().z() + offset_z;
+  grasp_pose_msg.pose.position.z = T_OB.translation().z();
 
   grasp_pose_msg.pose.orientation.w = orientation_grasp_pose.w();
   grasp_pose_msg.pose.orientation.x = orientation_grasp_pose.x();

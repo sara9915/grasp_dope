@@ -6,6 +6,8 @@
 #include "grasp_dope/goal_pose_plan_Action.h"
 #include <eigen3/Eigen/Geometry> 
 
+
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "client_action");
@@ -24,6 +26,8 @@ int main(int argc, char **argv)
             return -1;
         }
     }
+
+
 
 
     /*Activating get_grasp_pose service*/
@@ -51,22 +55,31 @@ int main(int argc, char **argv)
     }
 
 
+
+
+
     /* Calling planning action server */
     //actionlib::SimpleActionClient<grasp_dope
     actionlib::SimpleActionClient<grasp_dope::goal_pose_plan_Action> ac("planning_action", true);
 
     ROS_INFO("Waiting for action server to start.");
     ac.waitForServer(); // will wait for infinite time
-
     ROS_INFO("Action server started, sending goal.");
-
     grasp_dope::goal_pose_plan_Goal goal;
-    goal.goal_pose = grasp_pose->pose;
 
-    // wait for the action to return
+    /* Pick pose definition */
+    goal.goal_pose_pick.pose = grasp_pose->pose;
+
+    /* Place pose definition */
+    goal.goal_pose_place.pose = grasp_pose->pose;
+    goal.goal_pose_place.pose.position.y = grasp_pose->pose.position.y + 0.60;
+    goal.goal_pose_place.pose.position.x = grasp_pose->pose.position.x - 0.50;
+
+    /* Planning and execute to pre_grasp_pose*/
     ac.sendGoalAndWait(goal);
-    ROS_INFO_STREAM("Finish with state: " << ac.getState().state_);
+    ROS_INFO_STREAM(ac.getResult()->success);
 
-    ros::spin();
+
+    //ros::spin();
     return 0;
 }
