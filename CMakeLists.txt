@@ -14,6 +14,8 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   geometry_msgs
   moveit_ros_planning_interface
+  actionlib_msgs
+  actionlib
 )
 
 ## System dependencies are found with CMake's conventions
@@ -63,17 +65,17 @@ add_service_files(
 )
 
 ## Generate actions in the 'action' folder
-# add_action_files(
-#   FILES
-#   Action1.action
-#   Action2.action
-# )
+add_action_files(
+  FILES
+  goal_pose_plan_.action
+)
 
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
   DEPENDENCIES
   std_msgs
   geometry_msgs
+  actionlib_msgs
 )
 
 ################################################
@@ -108,7 +110,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES grasp_dope
-   CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs
+   CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs actionlib_msgs
    #DEPENDS Eigen3
 )
 
@@ -139,7 +141,9 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(grasp_pose_node src/grasp_pose_node.cpp)
 add_executable(scene_builder_node src/scene_builder_node.cpp)
-add_executable(action_client_moveit src/action_client_moveit.cpp)
+add_executable(pick_and_place src/pick_and_place.cpp)
+add_executable(planning_server src/planning_server.cpp)
+
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -160,7 +164,11 @@ target_link_libraries(scene_builder_node
   ${catkin_LIBRARIES}
 )
 
-target_link_libraries(action_client_moveit
+target_link_libraries(pick_and_place
+  ${catkin_LIBRARIES}
+)
+
+target_link_libraries(planning_server
   ${catkin_LIBRARIES}
 )
 
