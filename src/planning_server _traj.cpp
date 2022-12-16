@@ -32,7 +32,8 @@ moveit::planning_interface::MoveGroupInterface::Plan planning_joint(const geomet
     move_group_interface.setPoseTarget(target_pose, "end_effector_tool0");
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
 
-    move_group_interface.setMaxVelocityScalingFactor(0.05);
+    move_group_interface.setMaxVelocityScalingFactor(0.01);
+    move_group_interface.setMaxAccelerationScalingFactor(0.01);
     move_group_interface.setPlannerId("RRTstarkConfigDefault");
 
     success = (move_group_interface.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
@@ -44,8 +45,6 @@ moveit::planning_interface::MoveGroupInterface::Plan planning_joint(const geomet
 auto planning_cartesian(const geometry_msgs::Pose &target_pose, moveit::planning_interface::MoveGroupInterface &move_group_interface) //, moveit::planning_interface::MoveGroupInterface::Plan &my_plan)
 {
     move_group_interface.setPoseTarget(target_pose, "end_effector_tool0");
-    move_group_interface.setMaxVelocityScalingFactor(0.005);
-    move_group_interface.setMaxAccelerationScalingFactor(0.005);
     // move_group_interface.setPoseReferenceFrame("end_effector_tool0");
     std::vector<geometry_msgs::Pose> waypoints;
 
@@ -123,131 +122,6 @@ void attach_obj(moveit::planning_interface::MoveGroupInterface &move_group_inter
     move_group_interface.attachObject(object_to_attach.id, "end_effector_tool0");
 }
 
-void update_coeff(Eigen::Matrix<double, 6, 7> &coeff, const double &tf, const std::vector<double> &qi, const std::vector<double> &qi_dot, const std::vector<double> &qi_dot_dot, const std::vector<double> &qf, const std::vector<double> &qf_dot, const std::vector<double> &qf_dot_dot, const double &num_points_traj)
-{
-    double tf_2 = pow(tf, 2);
-    double tf_3 = pow(tf, 3);
-    double tf_4 = pow(tf, 4);
-    double tf_5 = pow(tf, 5);
-
-    Eigen::Matrix3d A;
-    A << 20.0 * tf_3, 12.0 * tf_2, 6.0 * tf,
-        5.0 * tf_4, 4.0 * tf_3, 3.0 * tf_2,
-        tf_5, tf_4, tf_3;
-
-    Eigen::Vector3d b;
-    Eigen::Vector3d coeff_calc;
-
-    for (int j = 0; j < coeff.cols(); j++)
-    {
-        coeff(5, j) = qi[j];               // a0
-        coeff(4, j) = qi_dot[j];           // a1
-        coeff(3, j) = qi_dot_dot[j] / 2.0; // a2
-
-        b(0) = qf_dot_dot[j] - qi_dot_dot[j];
-        b(1) = qf_dot[j] - qi_dot[j] - qi_dot_dot[j] * tf;
-        b(2) = qf[j] - qi[j] - qi_dot[j] * tf - qi_dot_dot[j] * tf_2 / 2.0;
-
-        coeff_calc = A.inverse() * b;
-
-        coeff(0, j) = coeff_calc[0]; // a5
-        coeff(1, j) = coeff_calc[1]; // a4
-        coeff(2, j) = coeff_calc[2]; // a3
-    }
-}
-
-double quintic_q(const double &t, const Eigen::Matrix<double, 6, 7> &coeff, const int &i)
-{
-    double t_2 = pow(t, 2);
-    double t_3 = pow(t, 3);
-    double t_4 = pow(t, 4);
-    double t_5 = pow(t, 5);
-
-    return (coeff(0, i) * t_5 + coeff(1, i) * t_4 + coeff(2, i) * t_3 + coeff(3, i) * t_2 + coeff(4, i) * t + coeff(5, i));
-}
-
-double quintic_qdot(const double &t, const Eigen::Matrix<double, 6, 7> &coeff, const int &i)
-{
-    double t_2 = pow(t, 2);
-    double t_3 = pow(t, 3);
-    double t_4 = pow(t, 4);
-    double t_5 = pow(t, 5);
-
-    return (coeff(0, i) * 5 * t_4 + coeff(1, i) * 4 * t_3 + coeff(2, i) * 3 * t_2 + coeff(3, i) * 2 * t + coeff(4, i));
-}
-
-void execute_trajectory(const moveit_msgs::RobotTrajectory &my_plan, ros::NodeHandle &nh, bool scale)
-{
-    ros::Rate loop_rate(rate);
-    ros::Publisher joint_cmd_pub = nh.advertise<sensor_msgs::JointState>("/motoman/joint_ll_control", 1);
-
-    sensor_msgs::JointState joint_cmd;
-    joint_cmd.position.resize(my_plan.joint_trajectory.points.at(0).positions.size());
-    joint_cmd.velocity.resize(my_plan.joint_trajectory.points.at(0).positions.size());
-    joint_cmd.name.resize(my_plan.joint_trajectory.points.at(0).positions.size());
-    joint_cmd.header = my_plan.joint_trajectory.header;
-    joint_cmd.name = my_plan.joint_trajectory.joint_names;
-
-    // coeff_q1 coeff_q2 coeff_q3 ... coeff_q7
-    //  a5
-    //  a4
-    //  ...
-    //  a0
-    Eigen::Matrix<double, 6, 7> coeff;
-
-    auto num_points_traj = my_plan.joint_trajectory.points.size();
-    double tf = 0;
-    double t = 0;
-    double t0 = 0;
-    double scale_factor = 10.0;
-
-    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI: " << num_points_traj);
-    std::vector<sensor_msgs::JointState> joint_cmd_vect;
-    for (int j = 0; j < num_points_traj - 1; j++)
-    {
-        tf = my_plan.joint_trajectory.points[j + 1].time_from_start.toSec() - my_plan.joint_trajectory.points[j].time_from_start.toSec();
-
-        auto qi = my_plan.joint_trajectory.points[j].positions;
-        auto qf = my_plan.joint_trajectory.points[j + 1].positions;
-
-        auto qi_dot = my_plan.joint_trajectory.points[j].velocities;
-        auto qf_dot = my_plan.joint_trajectory.points[j + 1].velocities;
-
-        auto qi_dot_dot = my_plan.joint_trajectory.points[j].accelerations;
-        auto qf_dot_dot = my_plan.joint_trajectory.points[j + 1].accelerations;
-
-        if (scale)
-        {
-            tf = tf * scale_factor;
-            for (int m = 0; m < qi.size(); m++)
-            {
-                qi_dot[m] = qi_dot[m] / scale_factor;
-                qi_dot_dot[m] = qi_dot_dot[m] / pow(scale_factor, 2);
-
-                qf_dot[m] = qf_dot[m] / scale_factor;
-                qf_dot_dot[m] = qf_dot_dot[m] / pow(scale_factor, 2);
-            }
-        }
-
-        update_coeff(coeff, tf, qi, qi_dot, qi_dot_dot, qf, qf_dot, qf_dot_dot, num_points_traj);
-
-        t = 0;
-        t0 = ros::Time::now().toSec();
-        while (t <= tf)
-        {
-            t = ros::Time::now().toSec() - t0;
-            for (int i = 0; i < qi.size(); i++)
-            {
-                joint_cmd.position.at(i) = quintic_q(t, coeff, i);
-                joint_cmd.velocity.at(i) = quintic_qdot(t, coeff, i);
-            }
-
-            joint_cmd_pub.publish(joint_cmd);
-            loop_rate.sleep();
-        }
-    }
-}
-
 bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::SimpleActionServer<grasp_dope::goal_pose_plan_Action> *as, ros::NodeHandle *nh, moveit::planning_interface::MoveGroupInterface *move_group_interface, moveit::planning_interface::PlanningSceneInterface *planning_scene_interface, const moveit::core::JointModelGroup *joint_model_group, moveit::core::RobotStatePtr &kinematic_state)
 {
     // create messages that are used to published feedback/result
@@ -259,17 +133,13 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
     geometry_msgs::Pose grasp_pose;
     geometry_msgs::Pose post_grasp_pose;
     geometry_msgs::Pose place_pose;
-    geometry_msgs::Pose post_place_pose;
 
     moveit::core::RobotState start_state(*move_group_interface->getCurrentState());
 
     moveit::planning_interface::MoveGroupInterface::Plan plan_pre_grasp;
     moveit_msgs::RobotTrajectory plan_pick;
     moveit_msgs::RobotTrajectory plan_post_grasp;
-
     moveit::planning_interface::MoveGroupInterface::Plan plan_place;
-
-    moveit_msgs::RobotTrajectory plan_post_place;
     moveit::planning_interface::MoveGroupInterface::Plan plan_homing;
 
     std::vector<geometry_msgs::Pose> pre_grasp_attemp_vector;
@@ -295,7 +165,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
     for (int i = 0; i < inclination_attempt; i++)
     {
         theta = (i * M_PI / (3 * inclination_attempt));
-        // ROS_INFO_STREAM("theta: " << theta);
+        ROS_INFO_STREAM("theta: " << theta);
 
         /* Rotazione attorno all'asse y */
         rotation_theta << cos(theta), 0, sin(theta),
@@ -305,7 +175,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         for (int k = 0; k < rotation_attempt; k++)
         {
             alpha = (k * 2 * M_PI / rotation_attempt);
-            // ROS_INFO_STREAM("alpha: " << alpha);
+            ROS_INFO_STREAM("alpha: " << alpha);
             pre_grasp_attemp.position.x = goal->goal_pose_pick.pose.position.x + offset * sin(theta) * sin(alpha);
             pre_grasp_attemp.position.y = goal->goal_pose_pick.pose.position.y + offset * sin(theta) * cos(alpha);
             pre_grasp_attemp.position.z = goal->goal_pose_pick.pose.position.z + offset * cos(theta);
@@ -368,11 +238,13 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         move_group_interface->setStartState(start_state);
 
         plan_pre_grasp = planning_joint(pre_grasp_pose, *move_group_interface);
-
         ROS_INFO_STREAM("Result planning pre-grasp pose: " << success);
 
         if (success)
         {
+            std::cout << "Press Enter to Continue";
+            std::cin.ignore();
+            execute_trajectory(plan_pre_grasp.trajectory_, *nh);
             std::cout << "Press Enter to Continue";
             std::cin.ignore();
 
@@ -465,13 +337,13 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         std::cout << "Press Enter to start executing";
         std::cin.ignore();
         ROS_INFO_STREAM("Executing trajectory pre_grasp...");
-        execute_trajectory(plan_pre_grasp.trajectory_, *nh, false);
+        execute_trajectory(plan_pre_grasp.trajectory_, *nh);
 
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
 
         ROS_INFO_STREAM("Executing trajectory pick...");
-        execute_trajectory(plan_pick, *nh, true);
+        execute_trajectory(plan_pick, *nh);
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
 
@@ -494,12 +366,12 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         std::cin.ignore();
 
         ROS_INFO_STREAM("Executing trajectory post grasp...");
-        execute_trajectory(plan_post_grasp, *nh, true);
+        execute_trajectory(plan_post_grasp, *nh);
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
 
-        ROS_INFO_STREAM("Executing trajectory place...");
-        execute_trajectory(plan_place.trajectory_, *nh, false);
+        ROS_INFO_STREAM("Executing trajectory post grasp...");
+        execute_trajectory(plan_place.trajectory_, *nh);
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
 
@@ -520,32 +392,16 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         std::cin.ignore();
 
         move_group_interface->setStartStateToCurrentState();
-        post_place_pose = place_pose;
-        post_place_pose.position.z = post_place_pose.position.z + 0.10;
-        plan_post_place = planning_cartesian(get_tool_pose(post_place_pose), *move_group_interface);
-        if (success)
-        {
-            std::cout << "Press Enter to Continue";
-            std::cin.ignore();
-            execute_trajectory(plan_post_place, *nh, true);
-            std::cout << "Press Enter to Continue";
-            std::cin.ignore();
-            move_group_interface->setStartStateToCurrentState();
-            move_group_interface->setJointValueTarget(homing);
-            move_group_interface->setMaxVelocityScalingFactor(0.05);
-            move_group_interface->setMaxAccelerationScalingFactor(0.05);
+        move_group_interface->setJointValueTarget(homing);
+        move_group_interface->setMaxVelocityScalingFactor(0.05);
+        move_group_interface->setMaxAccelerationScalingFactor(0.01);
 
-            success_homing = (move_group_interface->plan(plan_homing) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
-            if (success_homing)
-            {
-                std::cout << "Press Enter to return Home";
-                std::cin.ignore();
-                execute_trajectory(plan_homing.trajectory_, *nh, false);
-            }
-        }
-        else
+        success_homing = (move_group_interface->plan(plan_homing) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+        if (success_homing)
         {
-            ROS_INFO_STREAM("Error planning");
+            std::cout << "Press Enter to return Home";
+            std::cin.ignore();
+            execute_trajectory(plan_homing.trajectory_, *nh);
         }
     }
 

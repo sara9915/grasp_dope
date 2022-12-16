@@ -66,12 +66,12 @@ void buildScene() {
 
   // COSTRUISCO LA SCENA
 
-  double Table_DX = 0.85;
-  double Table_DY = 1.20; //0.65
+  double Table_DX = 1.20;
+  double Table_DY = 0.85; //0.65
   double Table_DZ = 0.80;
-  double container_spessore = 0.005;
+  double container_spessore = 0.01;
   double container_larghezza = 0.50;
-  double container_altezza = 0.20;
+  double container_altezza = 0.23;
   double container_lunghezza = 0.30;
   double x1 = 0.15; // distanza tra il bordo del tavolo e la cesta
 
@@ -81,57 +81,57 @@ void buildScene() {
     geometry_msgs::PoseStamped pose;
     pose.header.frame_id = "world";
     pose.pose.orientation.w = 1.0;
-    pose.pose.position.x = Table_DX/4;
-    pose.pose.position.y = 0.15; //0
+    pose.pose.position.x = 0.15;
+    pose.pose.position.y = -Table_DY/4; //0
     pose.pose.position.z = -Table_DZ/2;
     addBOX(*planning_scene_interface, Table_DX, Table_DY, Table_DZ, pose,
           "obst_1");
  }
 
-  // object contaier
-  {
-    geometry_msgs::PoseStamped pose;
-    pose.header.frame_id = "world";
-    pose.pose.orientation.w = 1.0;
-    pose.pose.position.x = Table_DX/2+x1;
-    pose.pose.position.y = 0;
-    pose.pose.position.z = container_altezza/2;
-    addBOX(*planning_scene_interface, container_spessore, container_larghezza, container_altezza, pose,
-          "obst_2");
-  }
+  // // object contaier
+  // {
+  //   geometry_msgs::PoseStamped pose;
+  //   pose.header.frame_id = "world";
+  //   pose.pose.orientation.w = 1.0;
+  //   pose.pose.position.x = 0;
+  //   pose.pose.position.y = -(Table_DY/2+x1);
+  //   pose.pose.position.z = container_altezza/2;
+  //   addBOX(*planning_scene_interface, container_larghezza, container_spessore, container_altezza, pose,
+  //         "obst_2");
+  // }
 
-  {
-    geometry_msgs::PoseStamped pose;
-    pose.header.frame_id = "world";
-    pose.pose.orientation.w = 1.0;
-    pose.pose.position.x = Table_DX/2+x1-container_lunghezza;
-    pose.pose.position.y = 0;
-    pose.pose.position.z = container_altezza/2;
-    addBOX(*planning_scene_interface, container_spessore, container_larghezza, container_altezza, pose,
-          "obst_3");
-  }
+  // {
+  //   geometry_msgs::PoseStamped pose;
+  //   pose.header.frame_id = "world";
+  //   pose.pose.orientation.w = 1.0;
+  //   pose.pose.position.x = 0;
+  //   pose.pose.position.y = -(Table_DY/2+x1-container_lunghezza);
+  //   pose.pose.position.z = container_altezza/2;
+  //   addBOX(*planning_scene_interface, container_larghezza, container_spessore, container_altezza, pose,
+  //         "obst_3");
+  // }
 
-  {
-    geometry_msgs::PoseStamped pose;
-    pose.header.frame_id = "world";
-    pose.pose.orientation.w = 1.0;
-    pose.pose.position.x = Table_DX/2;
-    pose.pose.position.y = container_larghezza/2 + container_spessore;
-    pose.pose.position.z = container_altezza/2;
-    addBOX(*planning_scene_interface, container_lunghezza + container_spessore, container_spessore, container_altezza, pose,
-          "obst_4");
-  }
+  // {
+  //   geometry_msgs::PoseStamped pose;
+  //   pose.header.frame_id = "world";
+  //   pose.pose.orientation.w = 1.0;
+  //   pose.pose.position.x = container_larghezza/2 + container_spessore;
+  //   pose.pose.position.y = -(Table_DY/2);
+  //   pose.pose.position.z = container_altezza/2;
+  //   addBOX(*planning_scene_interface, container_spessore, container_lunghezza + container_spessore, container_altezza, pose,
+  //         "obst_4");
+  // }
 
-  {
-    geometry_msgs::PoseStamped pose;
-    pose.header.frame_id = "world";
-    pose.pose.orientation.w = 1.0;
-    pose.pose.position.x = Table_DX/2;
-    pose.pose.position.y = -(container_larghezza/2 + container_spessore);
-    pose.pose.position.z = container_altezza/2;
-    addBOX(*planning_scene_interface, container_lunghezza + container_spessore, container_spessore, container_altezza, pose,
-          "obst_5");
-  }
+  // {
+  //   geometry_msgs::PoseStamped pose;
+  //   pose.header.frame_id = "world";
+  //   pose.pose.orientation.w = 1.0;
+  //   pose.pose.position.x = -(container_larghezza/2 + container_spessore);
+  //   pose.pose.position.y = -(Table_DY/2);
+  //   pose.pose.position.z = container_altezza/2;
+  //   addBOX(*planning_scene_interface, container_spessore, container_lunghezza + container_spessore, container_altezza, pose,
+  //         "obst_5");
+  // }
 
 }
 

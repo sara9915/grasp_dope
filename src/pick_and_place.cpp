@@ -56,8 +56,6 @@ int main(int argc, char **argv)
 
 
 
-
-
     /* Calling planning action server */
     //actionlib::SimpleActionClient<grasp_dope
     actionlib::SimpleActionClient<grasp_dope::goal_pose_plan_Action> ac("planning_action", true);
@@ -69,11 +67,25 @@ int main(int argc, char **argv)
 
     /* Pick pose definition */
     goal.goal_pose_pick.pose = grasp_pose->pose;
+    goal.goal_pose_pick.pose.position.z = goal.goal_pose_pick.pose.position.z;// - 0.01;
+    goal.goal_pose_pick.pose.position.y = goal.goal_pose_pick.pose.position.y;// - 0.04;
+    goal.goal_pose_pick.pose.position.x = goal.goal_pose_pick.pose.position.x;// + 0.01;
 
     /* Place pose definition */
-    goal.goal_pose_place.pose = grasp_pose->pose;
-    goal.goal_pose_place.pose.position.y = grasp_pose->pose.position.y + 0.60;
-    goal.goal_pose_place.pose.position.x = grasp_pose->pose.position.x - 0.50;
+    goal.goal_pose_place.pose.position.y = -0.48;
+    goal.goal_pose_place.pose.position.x = -0.30;
+    goal.goal_pose_place.pose.position.z = 0.06;
+
+    // Eigen::Matrix3d place_rotation;
+    // place_rotation << -1,0,0,
+    //                     0,1,0,
+    //                     0,0,-1;
+
+    // Eigen::Quaterniond place_quaternion(place_rotation);
+    // goal.goal_pose_place.pose.orientation.w = place_quaternion.w();
+    // goal.goal_pose_place.pose.orientation.x = place_quaternion.x();
+    // goal.goal_pose_place.pose.orientation.y = place_quaternion.y();
+    // goal.goal_pose_place.pose.orientation.z = place_quaternion.z();
 
     /* Planning and execute to pre_grasp_pose*/
     ac.sendGoalAndWait(goal);

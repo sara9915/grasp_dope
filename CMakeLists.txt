@@ -16,6 +16,9 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_planning_interface
   actionlib_msgs
   actionlib
+  trajectory_msgs
+  wsg_32_common
+  sun_traj_lib
 )
 
 ## System dependencies are found with CMake's conventions
@@ -62,6 +65,7 @@ find_package(Eigen3 REQUIRED)
 add_service_files(
   FILES
   desired_grasp_pose_activate.srv
+  start_reading.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -76,6 +80,7 @@ generate_messages(
   std_msgs
   geometry_msgs
   actionlib_msgs
+  trajectory_msgs
 )
 
 ################################################
@@ -110,7 +115,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES grasp_dope
-   CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs actionlib_msgs
+   CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs actionlib_msgs trajectory_msgs wsg_32_common sun_traj_lib
    #DEPENDS Eigen3
 )
 
@@ -139,10 +144,13 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
+
+
 add_executable(grasp_pose_node src/grasp_pose_node.cpp)
 add_executable(scene_builder_node src/scene_builder_node.cpp)
 add_executable(pick_and_place src/pick_and_place.cpp)
 add_executable(planning_server src/planning_server.cpp)
+add_executable(traj_interp src/traj_interp.cpp)
 
 
 ## Rename C++ executable without prefix
@@ -156,6 +164,8 @@ add_executable(planning_server src/planning_server.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
+
+
 target_link_libraries(grasp_pose_node
   ${catkin_LIBRARIES}
 )
@@ -171,6 +181,11 @@ target_link_libraries(pick_and_place
 target_link_libraries(planning_server
   ${catkin_LIBRARIES}
 )
+
+target_link_libraries(traj_interp
+  ${catkin_LIBRARIES}
+)
+
 
 #############
 ## Install ##

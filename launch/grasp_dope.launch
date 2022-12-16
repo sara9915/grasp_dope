@@ -3,7 +3,7 @@
     <include file="$(find dope)/launch/dope.launch" />
 
     <!-- run realsense camera -->
-    <!-- <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <include file="$(find realsense2_camera)/launch/rs_camera.launch">
         <arg name="align_depth" value="true" />
         <arg name="depth_width" value="640" />
         <arg name="depth_height" value="480" />
@@ -11,7 +11,7 @@
         <arg name="color_width" value="640" />
         <arg name="color_height" value="480" />
         <arg name="color_fps" value="30" />
-    </include> -->
+    </include>
 
     <!-- run yaskawa moveit configuration -->
     <include file="$(find yaskawa_moveit_config)/launch/demo.launch" />
@@ -21,5 +21,6 @@
 
     <!-- run grasp_pose_node service server -->
     <node name="grasp_pose_node" pkg="grasp_dope" type="grasp_pose_node" output="screen" clear_params="true"/>
+
 
 </launch>

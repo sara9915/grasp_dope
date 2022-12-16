@@ -63,7 +63,9 @@
   <depend>geometry_msgs</depend>
   <depend>moveit_ros_planning_interface</depend>
   <depend>actionlib_msgs</depend>
-
+  <depend>trajectory_msgs</depend>
+  <depend>wsg_32_common</depend>
+  <depend>sun_traj_lib</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
