@@ -16,7 +16,8 @@
 	<!-- realsense camera -->
 	<xacro:include filename="$(find realsense2_description)/urdf/_d435i.urdf.xacro"/>
 	<xacro:sensor_d435i parent="base_link_gripper">	
-		<origin xyz="-0.032192 0.021689 0.095" rpy="0 ${25*deg} ${-90*deg}" />
+		<origin xyz="-0.032192 0.021689 0.095" rpy="0 ${21.5*deg} ${-90*deg}" />
+		<!-- <origin xyz="-0.032192 0.021689 0.095" rpy="0 ${25*deg} ${-90*deg}" /> -->
 	</xacro:sensor_d435i>
 
 	<!-- end effector frame -->

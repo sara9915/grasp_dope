@@ -45,7 +45,7 @@ void calculate_pose(const geometry_msgs::PoseStamped::ConstPtr& obj_pose)
   ROS_INFO_STREAM("Reading object poses...");
   /* Object pose detected with best score */
   // ROS_INFO_STREAM(obj_pose->pose);
-  Eigen::Vector3d translation_OC(obj_pose->pose.position.x, obj_pose->pose.position.y, obj_pose->pose.position.z);
+  Eigen::Vector3d translation_OC(obj_pose->pose.position.x, obj_pose->pose.position.y, obj_pose->pose.position.z-0.01);
   Eigen::Quaterniond orientation_OC(obj_pose->pose.orientation.w,obj_pose->pose.orientation.x,obj_pose->pose.orientation.y,obj_pose->pose.orientation.z);
   Eigen::Isometry3d T_OC(orientation_OC);
   T_OC.translation() = translation_OC;

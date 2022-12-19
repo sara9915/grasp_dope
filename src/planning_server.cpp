@@ -107,15 +107,25 @@ void attach_obj(moveit::planning_interface::MoveGroupInterface &move_group_inter
     shape_msgs::SolidPrimitive box_primitive;
     box_primitive.type = primitive.BOX;
     box_primitive.dimensions.resize(3);
-    box_primitive.dimensions[primitive.BOX_X] = 0.08; // box_size->detections[0].bbox.size.x;
-    box_primitive.dimensions[primitive.BOX_Y] = 0.08; // box_size->detections[0].bbox.size.y;
-    box_primitive.dimensions[primitive.BOX_Z] = 0.08; // box_size->detections[0].bbox.size.z;
+    box_primitive.dimensions[primitive.BOX_X] = box_size->detections[0].bbox.size.x;
+    box_primitive.dimensions[primitive.BOX_Y] = box_size->detections[0].bbox.size.y;
+    box_primitive.dimensions[primitive.BOX_Z] = box_size->detections[0].bbox.size.z;
 
     // La posizione del box è definita rispetto alla terna world
     object_to_attach.header.frame_id = "base_link";
 
     // First, we add the object to the world (without using a vector)
     object_to_attach.primitives.push_back(box_primitive);
+    Eigen::Matrix3d rotation;
+    rotation << 1,0,0,
+                0,1,0,
+                0,0,0;
+    Eigen::Quaterniond quat(rotation);
+    pose_obj.orientation.w = quat.w();
+    pose_obj.orientation.x = quat.x();
+    pose_obj.orientation.y = quat.y();
+    pose_obj.orientation.z = quat.z();
+
     object_to_attach.primitive_poses.push_back(pose_obj);
     object_to_attach.operation = object_to_attach.ADD;
     planning_scene_interface.applyCollisionObject(object_to_attach);
@@ -281,18 +291,18 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
 
     double alpha = 0.0; // rotazione attorno all'oggetto
     double theta = 0.0; // inclinazione rispetto all'oggetto
-    double offset = 0.18;
+    double offset = 0.08; //offset pre-grasp
 
     rotation_start << 0, -1, 0,
         -1, 0, 0,
         0, 0, -1;
     int rotation_attempt = 4;
-    int inclination_attempt = 5;
+    int inclination_attempt = 4;
     ros::NodeHandle temp;
     ros::Publisher pre_grasp_attempt_pub = temp.advertise<geometry_msgs::PoseStamped>("/attempt", 1);
     geometry_msgs::PoseStamped temp_pub;
 
-    for (int i = 0; i < inclination_attempt; i++)
+    for (int i = 1; i < inclination_attempt; i++)
     {
         theta = (i * M_PI / (3 * inclination_attempt));
         // ROS_INFO_STREAM("theta: " << theta);
@@ -476,14 +486,14 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         std::cin.ignore();
 
         ROS_INFO_STREAM("--- CLOSING GRIPPER ---");
-        ros::service::waitForService("/wsg_32_driver/move");
+        ros::service::waitForService("/wsg_32_driver/grasp");
         wsg_32_common::Move::Request req;
         wsg_32_common::Move::Response res;
 
-        req.width = 40.0;
-        req.speed = 30.0;
+        req.width = 38.0;
+        req.speed = 10.0;
 
-        if (!ros::service::call<wsg_32_common::Move::Request, wsg_32_common::Move::Response>("/wsg_32_driver/move", req, res))
+        if (!ros::service::call<wsg_32_common::Move::Request, wsg_32_common::Move::Response>("/wsg_32_driver/grasp", req, res))
         {
             ROS_INFO_STREAM("Error activating service move gripper...");
             return -1;
@@ -521,7 +531,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
 
         move_group_interface->setStartStateToCurrentState();
         post_place_pose = place_pose;
-        post_place_pose.position.z = post_place_pose.position.z + 0.10;
+        post_place_pose.position.z = post_place_pose.position.z + 0.11;
         plan_post_place = planning_cartesian(get_tool_pose(post_place_pose), *move_group_interface);
         if (success)
         {

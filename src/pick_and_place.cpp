@@ -72,9 +72,9 @@ int main(int argc, char **argv)
     goal.goal_pose_pick.pose.position.x = goal.goal_pose_pick.pose.position.x;// + 0.01;
 
     /* Place pose definition */
-    goal.goal_pose_place.pose.position.y = -0.48;
-    goal.goal_pose_place.pose.position.x = -0.30;
-    goal.goal_pose_place.pose.position.z = 0.06;
+    goal.goal_pose_place.pose.position.y = -0.28;
+    goal.goal_pose_place.pose.position.x = 0.50;
+    goal.goal_pose_place.pose.position.z = 0.06-0.08;
 
     // Eigen::Matrix3d place_rotation;
     // place_rotation << -1,0,0,
