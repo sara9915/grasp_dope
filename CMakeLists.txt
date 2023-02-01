@@ -13,12 +13,15 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   message_generation
   geometry_msgs
+  sensor_msgs
   moveit_ros_planning_interface
   actionlib_msgs
   actionlib
   trajectory_msgs
   wsg_32_common
   sun_traj_lib
+  cv_bridge
+  dope
 )
 
 ## System dependencies are found with CMake's conventions
@@ -28,7 +31,7 @@ find_package(Eigen3 REQUIRED)
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-# catkin_python_setup()
+catkin_python_setup()
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -55,17 +58,16 @@ find_package(Eigen3 REQUIRED)
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+)
 
 ## Generate services in the 'srv' folder
 add_service_files(
   FILES
   desired_grasp_pose_activate.srv
   start_reading.srv
+  depth_optimizer.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -81,6 +83,7 @@ generate_messages(
   geometry_msgs
   actionlib_msgs
   trajectory_msgs
+  sensor_msgs
 )
 
 ################################################
@@ -115,7 +118,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES grasp_dope
-   CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs actionlib_msgs trajectory_msgs wsg_32_common sun_traj_lib
+   CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs actionlib_msgs trajectory_msgs wsg_32_common sun_traj_lib cv_bridge
    #DEPENDS Eigen3
 )
 
@@ -147,11 +150,9 @@ include_directories(
 
 
 add_executable(grasp_pose_node src/grasp_pose_node.cpp)
-add_executable(scene_builder_node src/scene_builder_node.cpp)
-add_executable(pick_and_place src/pick_and_place.cpp)
+# add_executable(scene_builder_node src/scene_builder_node.cpp)
 add_executable(planning_server src/planning_server.cpp)
-add_executable(traj_interp src/traj_interp.cpp)
-
+add_executable(pick_and_place src/pick_and_place.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -170,7 +171,11 @@ target_link_libraries(grasp_pose_node
   ${catkin_LIBRARIES}
 )
 
-target_link_libraries(scene_builder_node
+# target_link_libraries(scene_builder_node
+#   ${catkin_LIBRARIES}
+# )
+
+target_link_libraries(planning_server
   ${catkin_LIBRARIES}
 )
 
@@ -178,13 +183,6 @@ target_link_libraries(pick_and_place
   ${catkin_LIBRARIES}
 )
 
-target_link_libraries(planning_server
-  ${catkin_LIBRARIES}
-)
-
-target_link_libraries(traj_interp
-  ${catkin_LIBRARIES}
-)
 
 
 #############
@@ -196,10 +194,11 @@ target_link_libraries(traj_interp
 
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
-# catkin_install_python(PROGRAMS
-#   scripts/my_python_script
-#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+catkin_install_python(PROGRAMS
+  scripts/depth_optimizer.py
+  scripts/depth_optimizer_ransac_optimized.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html

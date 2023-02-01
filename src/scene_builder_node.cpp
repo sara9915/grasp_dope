@@ -79,7 +79,7 @@ void buildScene()
   double container_spessore_max = 0.025;
   double container_spessore_min = 0.01;
   double container_larghezza = 0.385;
-  double container_altezza = 0.09;
+  double container_altezza = 0.14;
   double container_lunghezza = 0.30;
   double x1 = 0.15; // distanza tra il bordo del tavolo e la cesta
 

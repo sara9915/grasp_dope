@@ -64,8 +64,11 @@
   <depend>moveit_ros_planning_interface</depend>
   <depend>actionlib_msgs</depend>
   <depend>trajectory_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>wsg_32_common</depend>
   <depend>sun_traj_lib</depend>
+  <depend>cv_bridge</depend>
+  <depend>dope</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

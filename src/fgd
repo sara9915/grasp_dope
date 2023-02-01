@@ -1,8 +1,0 @@
-rostopic pub -r 10 /motoman/joint_states sensor_msgs/JointState "header:
-  seq: 0
-  stamp: {secs: 0, nsecs: 0}
-  frame_id: ''
-name: ['joint_s,joint_l,joint_e,joint_u,joint_r,joint_b,joint_t']
-position: [1.5775700807571411, -0.0007290205685421824, 0.004875325132161379, 1.8909882307052612, 0.027429398149251938, 1.853945016860962, 0.044407445937395096]
-velocity: []
-effort: []" 
