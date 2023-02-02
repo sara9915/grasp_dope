@@ -46,6 +46,9 @@ int main(int argc, char **argv)
     goal.goal_pose_place.pose.position.x = 0.50;
     goal.goal_pose_place.pose.position.z = 0.05-0.08;
 
+    goal.scaled_cuboid_dimensions = res.scaled_cuboid_dimensions;
+    goal.scale_obj = res.scale_obj;
+
 
     /* Planning and execute to pre_grasp_pose*/
     ac.sendGoalAndWait(goal);

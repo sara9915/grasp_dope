@@ -21,8 +21,9 @@
     <!-- run image_transport to convert compressed image in raw image -->
     <node type="republish" name="republish" pkg="image_transport" args="compressed in:=/camera/color/image_raw _image_transport:=compressed out:=/camera/color/image_raw2" />
 
-    <!-- rosrun image_transport republish compressed in:=/camera/color/image_raw _image_transport:=compressed out:=/camera/color/image_raw2 -->
-
     <!-- run rviz -->
     <node type="rviz" name="rviz" pkg="rviz" args="-d $(find grasp_dope)/rviz/octomap.rviz" />
+
+    <!-- run trasnform gripper for real robot -->
+    <node type="tf_gripper" name="tf_gripper" pkg="grasp_dope" />
 </launch>

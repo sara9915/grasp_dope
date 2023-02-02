@@ -2,4 +2,6 @@ geometry_msgs/PoseStamped estimated_pose
 float64[] depth_matrix
 ---
 geometry_msgs/PoseStamped refined_pose
+float64[3] scaled_cuboid_dimension
+float64 scale_obj
 bool success

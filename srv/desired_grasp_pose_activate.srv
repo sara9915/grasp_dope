@@ -1,3 +1,5 @@
 bool activate
 ---
 geometry_msgs/PoseStamped refined_pose
+float64[3] scaled_cuboid_dimensions
+float64 scale_obj

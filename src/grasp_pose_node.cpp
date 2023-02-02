@@ -227,6 +227,8 @@ bool get_grasp_pose(grasp_dope::desired_grasp_pose_activate::Request &req,
     ROS_INFO_STREAM(grasp_pose_msg);
     success_srv = true;
     res.refined_pose = grasp_pose_msg;
+    res.scaled_cuboid_dimensions = srv.response.scaled_cuboid_dimension;
+    res.scale_obj = srv.response.scale_obj;
     return true;
   }
   else

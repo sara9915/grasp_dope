@@ -21,6 +21,9 @@
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
 
+#include <geometric_shapes/shape_operations.h>
+#include "slipping_control_common/Slipping_Control_Client.h"
+
 bool success_planning_pp = false;
 bool success;
 double rate = 50; // Hz
@@ -33,7 +36,7 @@ moveit::planning_interface::MoveGroupInterface::Plan planning_joint(const geomet
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
 
     move_group_interface.setMaxVelocityScalingFactor(0.05);
-    move_group_interface.setPlanningTime(10);
+    move_group_interface.setPlanningTime(12);
     move_group_interface.setPlannerId("RRTstarkConfigDefault");
 
     success = (move_group_interface.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
@@ -98,35 +101,31 @@ auto get_tool_pose(const geometry_msgs::Pose &pose)
     return start_state_pose;
 }
 
-void attach_obj(moveit::planning_interface::MoveGroupInterface &move_group_interface, moveit::planning_interface::PlanningSceneInterface &planning_scene_interface, geometry_msgs::Pose pose_obj)
+void attach_obj(moveit::planning_interface::MoveGroupInterface &move_group_interface, moveit::planning_interface::PlanningSceneInterface &planning_scene_interface, geometry_msgs::Pose pose_obj, float scale_obj)
 {
     moveit_msgs::CollisionObject object_to_attach;
-    shape_msgs::SolidPrimitive primitive;
-    object_to_attach.id = "obj";
+    Eigen::Vector3d scale(scale_obj, scale_obj, scale_obj);
 
-    shape_msgs::SolidPrimitive box_primitive;
-    box_primitive.type = primitive.BOX;
-    box_primitive.dimensions.resize(3);
-    box_primitive.dimensions[primitive.BOX_X] = box_size->detections[0].bbox.size.x;
-    box_primitive.dimensions[primitive.BOX_Y] = box_size->detections[0].bbox.size.y;
-    box_primitive.dimensions[primitive.BOX_Z] = box_size->detections[0].bbox.size.z;
+    object_to_attach.id = "obj";
 
     // La posizione del box è definita rispetto alla terna world
     object_to_attach.header.frame_id = "base_link";
 
-    // First, we add the object to the world (without using a vector)
-    object_to_attach.primitives.push_back(box_primitive);
-    Eigen::Matrix3d rotation;
-    rotation << 1, 0, 0,
-        0, 1, 0,
-        0, 0, 0;
-    Eigen::Quaterniond quat(rotation);
-    pose_obj.orientation.w = quat.w();
-    pose_obj.orientation.x = quat.x();
-    pose_obj.orientation.y = quat.y();
-    pose_obj.orientation.z = quat.z();
+    shapes::Mesh *m = shapes::createMeshFromResource("file:///home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/Apple/Apple_4K/food_apple_01_4k.stl", scale);
 
-    object_to_attach.primitive_poses.push_back(pose_obj);
+    shape_msgs::Mesh mesh;
+    shapes::ShapeMsg mesh_msg;
+    shapes::constructMsgFromShape(m, mesh_msg);
+    mesh = boost::get<shape_msgs::Mesh>(mesh_msg);
+
+    object_to_attach.meshes.resize(1);
+    object_to_attach.mesh_poses.resize(1);
+    object_to_attach.meshes[0] = mesh;
+    object_to_attach.mesh_poses[0] = pose_obj;
+
+    object_to_attach.meshes.push_back(mesh);
+    object_to_attach.mesh_poses.push_back(object_to_attach.mesh_poses[0]);
+
     object_to_attach.operation = object_to_attach.ADD;
     planning_scene_interface.applyCollisionObject(object_to_attach);
 
@@ -498,7 +497,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
             return -1;
         }
 
-        attach_obj(*move_group_interface, *planning_scene_interface, goal->goal_pose_pick.pose);
+        // attach_obj(*move_group_interface, *planning_scene_interface, goal->goal_pose_pick.pose, goal->goal_pose_pick, goal->scale_obj);
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
 
@@ -594,11 +593,14 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
     rotation_start << 0, -1, 0,
         -1, 0, 0,
         0, 0, -1;
-    int rotation_attempt = 5;
+    int rotation_attempt = 4;
     int inclination_attempt = 4;
     ros::NodeHandle temp;
     ros::Publisher pre_grasp_attempt_pub = temp.advertise<geometry_msgs::PoseStamped>("/attempt", 1);
+    ros::Publisher pose_obj_pub = temp.advertise<geometry_msgs::PoseStamped>("/pose_obj_refined", 1);
+    // pose_obj_pub.publish(goal->goal_pose_pick.pose);
     geometry_msgs::PoseStamped temp_pub;
+    geometry_msgs::PoseStamped grasp_pose_stamped;
 
     for (int i = 0; i < inclination_attempt; i++)
     {
@@ -649,6 +651,10 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
         pre_grasp_pose = pre_grasp_attemp_vector.at(attempt);
 
         grasp_pose = goal->goal_pose_pick.pose;
+        grasp_pose_stamped.pose = grasp_pose;
+        grasp_pose_stamped.header.frame_id = "base_link";
+
+        pose_obj_pub.publish(grasp_pose_stamped);
         grasp_pose.orientation = pre_grasp_attemp_vector.at(attempt).orientation;
 
         post_grasp_pose = pre_grasp_pose;
@@ -702,7 +708,6 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
                 start_state.setFromIK(joint_model_group, get_tool_pose(grasp_pose));
                 move_group_interface->setStartState(start_state);
 
-                // attach_obj(*move_group_interface, *planning_scene_interface, goal->goal_pose_pick.pose);
                 plan_post_grasp = planning_cartesian(get_tool_pose(post_grasp_pose), *move_group_interface);
                 ROS_INFO_STREAM("Result planning post grasp pose: " << success);
 
@@ -710,6 +715,17 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
                 {
                     std::cout << "Press Enter to Continue";
                     std::cin.ignore();
+                    // Parameters for attach obj
+                    geometry_msgs::Pose attach_obj_pose;
+                    attach_obj_pose.position.x = post_grasp_pose.position.x;
+                    attach_obj_pose.position.y = post_grasp_pose.position.y;
+                    attach_obj_pose.position.z = post_grasp_pose.position.z;
+                    attach_obj_pose.orientation.w = goal->goal_pose_pick.pose.orientation.w;
+                    attach_obj_pose.orientation.x = goal->goal_pose_pick.pose.orientation.x;
+                    attach_obj_pose.orientation.y = goal->goal_pose_pick.pose.orientation.y;
+                    attach_obj_pose.orientation.z = goal->goal_pose_pick.pose.orientation.z;
+                    float scale_obj = goal->scale_obj;
+                    attach_obj(*move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
 
                     success_planning_pp = true;
                     attempt = 0;
@@ -718,16 +734,16 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
                 {
                     ROS_INFO_STREAM("Try with other pre-grasp pose...");
                     attempt = attempt + 1;
-                    // move_group_interface->detachObject("obj");
-                    // planning_scene_interface->removeCollisionObjects(obj_id);
+                    move_group_interface->detachObject("obj");
+                    planning_scene_interface->removeCollisionObjects(obj_id);
                 }
             }
             else
             {
                 ROS_INFO_STREAM("Try with other pre-grasp pose...");
                 attempt = attempt + 1;
-                // move_group_interface->detachObject("obj");
-                // planning_scene_interface->removeCollisionObjects(obj_id);
+                move_group_interface->detachObject("obj");
+                planning_scene_interface->removeCollisionObjects(obj_id);
             }
         }
         else
@@ -735,12 +751,15 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             ROS_INFO_STREAM("Try with other pre-grasp pose...");
             attempt = attempt + 1;
         }
-
     }
-
+    move_group_interface->detachObject("obj");
+    planning_scene_interface->removeCollisionObjects(obj_id);
     result.success = success;
     as->setSucceeded(result);
     bool success_homing = false;
+    Slipping_Control_Client slipping_control(*nh);
+    double grasp_force = 5.0; //[N]
+    slipping_control.home();
 
     if (success_planning_pp)
     {
@@ -754,6 +773,10 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
 
         ROS_INFO_STREAM("Executing trajectory pick...");
         execute_trajectory(plan_pick, *nh, true);
+        std::cout << "Press Enter to Continue with grasp";
+        std::cin.ignore();
+
+        slipping_control.grasp(grasp_force);
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
 
@@ -761,6 +784,18 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
         execute_trajectory(plan_post_grasp, *nh, true);
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
+
+        // Parameters for attach obj
+        geometry_msgs::Pose attach_obj_pose;
+        attach_obj_pose.position.x = post_grasp_pose.position.x;
+        attach_obj_pose.position.y = post_grasp_pose.position.y;
+        attach_obj_pose.position.z = post_grasp_pose.position.z;
+        attach_obj_pose.orientation.w = goal->goal_pose_pick.pose.orientation.w;
+        attach_obj_pose.orientation.x = goal->goal_pose_pick.pose.orientation.x;
+        attach_obj_pose.orientation.y = goal->goal_pose_pick.pose.orientation.y;
+        attach_obj_pose.orientation.z = goal->goal_pose_pick.pose.orientation.z;
+        float scale_obj = goal->scale_obj;
+        attach_obj(*move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
 
         move_group_interface->setStartStateToCurrentState();
         move_group_interface->setJointValueTarget(homing);
@@ -773,6 +808,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             std::cout << "Press Enter to return Home";
             std::cin.ignore();
             execute_trajectory(plan_homing.trajectory_, *nh, false);
+            slipping_control.home();
         }
 
         else
@@ -799,16 +835,30 @@ int main(int argc, char **argv)
 
     robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
     const moveit::core::RobotModelPtr &kinematic_model = robot_model_loader.getModel();
-
     moveit::core::RobotStatePtr kinematic_state(new moveit::core::RobotState(kinematic_model));
+
+    const moveit::core::JointModelGroup *gripper_group = kinematic_model->getJointModelGroup("gripper");
+    std::vector<double> gripper_values;
+    kinematic_state->copyJointGroupPositions(gripper_group, gripper_values);
+
+    gripper_values[0] = 0.0025;
+    gripper_values[1] = 0.0025;
+    kinematic_state->setJointGroupPositions(gripper_group, gripper_values);
+    ROS_INFO_STREAM("Current state is " << (kinematic_state->satisfiesBounds() ? "valid" : "not valid"));
+
+    kinematic_state->copyJointGroupPositions(gripper_group, gripper_values);
+    for (std::size_t i = 0; i < gripper_values.size(); ++i)
+    {
+        ROS_INFO("Joint: %f", gripper_values[i]);
+    }
 
     const moveit::core::JointModelGroup *joint_model_group =
         move_group_interface.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
 
-    // auto start_joints_values = ros::topic::waitForMessage<sensor_msgs::JointState>("/motoman/joint_states");
-    auto start_joints_values = ros::topic::waitForMessage<sensor_msgs::JointState>("/joint_states");
+    auto start_joints_values = ros::topic::waitForMessage<sensor_msgs::JointState>("/motoman/joint_states");
+    // auto start_joints_values = ros::topic::waitForMessage<sensor_msgs::JointState>("/joint_states");
     std::vector<double> joints_values;
-     
+
     for (auto element : start_joints_values->position)
     {
         joints_values.push_back(element);
@@ -816,14 +866,14 @@ int main(int argc, char **argv)
     }
     const std::vector<std::string> &joint_names = joint_model_group->getVariableNames();
 
-    std::vector<double> joints_values_tmp;
-    for(int i = 0; i < 7; i++) 
-    {
-        joints_values_tmp.push_back(joints_values[i]);
-    }
-    kinematic_state->setJointGroupPositions(joint_model_group, joints_values_tmp);
+    // std::vector<double> joints_values_tmp;
+    // for (int i = 0; i < 7; i++)
+    // {
+    //     joints_values_tmp.push_back(joints_values[i]);
+    // }
+    // kinematic_state->setJointGroupPositions(joint_model_group, joints_values_tmp);
 
-    // kinematic_state->setJointGroupPositions(joint_model_group, joints_values);
+    kinematic_state->setJointGroupPositions(joint_model_group, joints_values);
     homing = move_group_interface.getCurrentJointValues();
 
     for (auto element : move_group_interface.getCurrentJointValues())

@@ -22,6 +22,9 @@ find_package(catkin REQUIRED COMPONENTS
   sun_traj_lib
   cv_bridge
   dope
+  slipping_control_common
+  tf2
+  tf2_ros
 )
 
 ## System dependencies are found with CMake's conventions
@@ -118,7 +121,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES grasp_dope
-   CATKIN_DEPENDS roscpp rospy std_msgs message_runtime geometry_msgs actionlib_msgs trajectory_msgs wsg_32_common sun_traj_lib cv_bridge
+   CATKIN_DEPENDS roscpp rospy tf2 tf2_ros std_msgs message_runtime geometry_msgs actionlib_msgs trajectory_msgs wsg_32_common sun_traj_lib cv_bridge slipping_control_common
    #DEPENDS Eigen3
 )
 
@@ -153,6 +156,7 @@ add_executable(grasp_pose_node src/grasp_pose_node.cpp)
 # add_executable(scene_builder_node src/scene_builder_node.cpp)
 add_executable(planning_server src/planning_server.cpp)
 add_executable(pick_and_place src/pick_and_place.cpp)
+add_executable(tf_gripper src/tf_gripper.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -182,6 +186,11 @@ target_link_libraries(planning_server
 target_link_libraries(pick_and_place
   ${catkin_LIBRARIES}
 )
+
+target_link_libraries(tf_gripper
+  ${catkin_LIBRARIES}
+)
+
 
 
 

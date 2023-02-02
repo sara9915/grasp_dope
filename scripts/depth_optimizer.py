@@ -324,7 +324,7 @@ def handle_depth_optimizer(req):
     virtual_depth_array = []
     
 
-    return depth_optimizerResponse(optimized_pose, success)
+    return depth_optimizerResponse(optimized_pose, scaled_dimension, scale_obj, success)
 
 
 def depth_optimizer_service():

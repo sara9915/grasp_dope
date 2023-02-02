@@ -1,6 +1,8 @@
 #goal definition
 geometry_msgs/PoseStamped goal_pose_pick
 geometry_msgs/PoseStamped goal_pose_place
+float64[3] scaled_cuboid_dimensions
+float64 scale_obj
 ---
 #result definition
 bool success

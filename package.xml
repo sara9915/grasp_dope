@@ -69,6 +69,9 @@
   <depend>sun_traj_lib</depend>
   <depend>cv_bridge</depend>
   <depend>dope</depend>
+  <depend>slipping_control_common</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
