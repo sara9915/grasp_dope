@@ -4,8 +4,7 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <actionlib/client/simple_action_client.h>
 #include "grasp_dope/goal_pose_plan_Action.h"
-#include <eigen3/Eigen/Geometry> 
-
+#include <eigen3/Eigen/Geometry>
 
 int main(int argc, char **argv)
 {
@@ -13,6 +12,8 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     /*Activating get_grasp_pose service*/
+    std::cout << "Press Enter to Start";
+    std::cin.ignore();
     ROS_INFO_STREAM("--- Activating get_grasp_pose service ---");
     ros::service::waitForService("/get_grasp_pose_service");
     grasp_dope::desired_grasp_pose_activate::Request req;
@@ -25,9 +26,8 @@ int main(int argc, char **argv)
     }
     geometry_msgs::PoseStamped grasp_pose = res.refined_pose;
 
-
     /* Calling planning action server */
-    //actionlib::SimpleActionClient<grasp_dope
+    // actionlib::SimpleActionClient<grasp_dope
     actionlib::SimpleActionClient<grasp_dope::goal_pose_plan_Action> ac("planning_action", true);
 
     ROS_INFO("Waiting for action server to start.");
@@ -44,16 +44,14 @@ int main(int argc, char **argv)
     /* Place pose definition */
     goal.goal_pose_place.pose.position.y = -0.28;
     goal.goal_pose_place.pose.position.x = 0.50;
-    goal.goal_pose_place.pose.position.z = 0.05-0.08;
+    goal.goal_pose_place.pose.position.z = 0.05 - 0.08;
 
     goal.scaled_cuboid_dimensions = res.scaled_cuboid_dimensions;
     goal.scale_obj = res.scale_obj;
 
-
     /* Planning and execute to pre_grasp_pose*/
     ac.sendGoalAndWait(goal);
     ROS_INFO_STREAM(ac.getResult()->success);
-
 
     // ros::Publisher grasp_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/grasp_pose",1);
 
@@ -62,7 +60,6 @@ int main(int argc, char **argv)
     //     grasp_pose_pub.publish(grasp_pose);
     // }
 
-
-    //ros::spin();
+    // ros::spin();
     return 0;
 }

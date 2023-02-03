@@ -19,11 +19,14 @@
     <include file="$(find yaskawa_moveit_config)/launch/demo.launch" />
 
     <!-- run image_transport to convert compressed image in raw image -->
-    <node type="republish" name="republish" pkg="image_transport" args="compressed in:=/camera/color/image_raw _image_transport:=compressed out:=/camera/color/image_raw2" />
-
+    <node type="republish" name="republish_color" pkg="image_transport" args="compressed in:=/camera/color/image_raw _image_transport:=compressed out:=/camera/color/image_raw2" />
+    <node type="republish" name="republish_aligned_depth" pkg="image_transport" args="compressed in:=/camera/aligned_depth_to_color/image_raw _image_transport:=compressed out:=/camera/aligned_depth_to_color/image_raw2" />
     <!-- run rviz -->
     <node type="rviz" name="rviz" pkg="rviz" args="-d $(find grasp_dope)/rviz/octomap.rviz" />
 
-    <!-- run trasnform gripper for real robot -->
-    <node type="tf_gripper" name="tf_gripper" pkg="grasp_dope" />
+    <!-- run trasnform gripper for real robot -0.050628 -0.045628-->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="gripper_broadcaster1" args=" -0.055628 -0.160 -0.049 0 0 0 WSG-32_Body_2 Base_Jaw_3" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="gripper_broadcaster2" args="-0.045628 -0.160 -0.026 0 0 0 WSG-32_Body_2 Base_Jaw_4" />
+    
+
 </launch>
