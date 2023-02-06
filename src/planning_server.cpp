@@ -59,13 +59,16 @@ auto planning_cartesian(const geometry_msgs::Pose &target_pose, moveit::planning
     const double eef_step = 0.01;
     double fraction = move_group_interface.computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
-    if (fraction != 1)
+    if (fraction < 0.9)
     {
         ROS_INFO_STREAM("Fraction value: " << fraction);
         success = 0;
     }
     else
+    {
+        ROS_INFO_STREAM("Success with Fraction value: " << fraction);
         success = 1;
+    }
 
     return trajectory;
 }
@@ -602,6 +605,16 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
     geometry_msgs::PoseStamped temp_pub;
     geometry_msgs::PoseStamped grasp_pose_stamped;
 
+    /* Clear octomap to start planning */
+    ros::service::waitForService("/clear_octomap");
+    std_srvs::Empty::Request req;
+    std_srvs::Empty::Response res;
+    if (!ros::service::call<std_srvs::Empty::Request, std_srvs::Empty::Response>("/clear_octomap", req, res))
+    {
+        ROS_INFO_STREAM("Error activating service clear_octomap...");
+        return -1;
+    }
+
     for (int i = 0; i < inclination_attempt; i++)
     {
         theta = (i * M_PI / (3 * inclination_attempt));
@@ -616,7 +629,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             if (k < rotation_attempt / 2)
                 alpha = (k * M_PI / rotation_attempt); //- M_PI_2;
             else
-                alpha = (k-floor(rotation_attempt/2) * M_PI / rotation_attempt) - M_PI_2;
+                alpha = (k - floor(rotation_attempt / 2) * M_PI / rotation_attempt) - M_PI_2;
 
             pre_grasp_attemp.position.x = goal->goal_pose_pick.pose.position.x + offset * sin(theta) * sin(alpha);
             pre_grasp_attemp.position.y = goal->goal_pose_pick.pose.position.y + offset * sin(theta) * cos(alpha);
@@ -709,7 +722,13 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
                                 << "\n"
                                 << post_grasp_pose);
 
-                start_state.setFromIK(joint_model_group, get_tool_pose(grasp_pose));
+                // start_state.setFromIK(joint_model_group, get_tool_pose(grasp_pose));
+                std::vector<double> joint_positions_grasp;
+                for (auto element : joint_model_group, plan_pick.joint_trajectory.points.back().positions)
+                {
+                    joint_positions_grasp.push_back(element);
+                }
+                start_state.setJointGroupPositions(joint_model_group, joint_positions_grasp);
                 move_group_interface->setStartState(start_state);
 
                 plan_post_grasp = planning_cartesian(get_tool_pose(post_grasp_pose), *move_group_interface);
@@ -815,6 +834,8 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             std::cout << "Press Enter to open gripper";
             std::cin.ignore();
             slipping_control.home();
+            move_group_interface->detachObject("obj");
+            planning_scene_interface->removeCollisionObjects(obj_id);
         }
 
         else
@@ -822,6 +843,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             ROS_INFO_STREAM("Error planning");
         }
     }
+    success_planning_pp = false;
 
     return true;
 }
@@ -842,21 +864,6 @@ int main(int argc, char **argv)
     robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
     const moveit::core::RobotModelPtr &kinematic_model = robot_model_loader.getModel();
     moveit::core::RobotStatePtr kinematic_state(new moveit::core::RobotState(kinematic_model));
-
-    // const moveit::core::JointModelGroup *gripper_group = kinematic_model->getJointModelGroup("gripper");
-    // std::vector<double> gripper_values;
-    // kinematic_state->copyJointGroupPositions(gripper_group, gripper_values);
-
-    // gripper_values[0] = 0.0025;
-    // gripper_values[1] = 0.0025;
-    // kinematic_state->setJointGroupPositions(gripper_group, gripper_values);
-    // ROS_INFO_STREAM("Current state is " << (kinematic_state->satisfiesBounds() ? "valid" : "not valid"));
-
-    // kinematic_state->copyJointGroupPositions(gripper_group, gripper_values);
-    // for (std::size_t i = 0; i < gripper_values.size(); ++i)
-    // {
-    //     ROS_INFO("Joint: %f", gripper_values[i]);
-    // }
 
     const moveit::core::JointModelGroup *joint_model_group =
         move_group_interface.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
