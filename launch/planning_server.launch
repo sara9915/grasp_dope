@@ -5,7 +5,9 @@
     </node>
 
         <!-- run grasp_pose_node -->
-    <node name="grasp_pose_node" pkg="grasp_dope" type="grasp_pose_node" output="screen"/>
+    <node name="grasp_pose_node" pkg="grasp_dope" type="grasp_pose_node" output="screen">
+        <remap from="/dope/pose_obj" to="/dope/pose_Zucchina"/>
+    </node>
 
         <!-- run depth_optimizer -->
     <node name="depth_optimizer" pkg="grasp_dope" type="depth_optimizer.py" output="screen"/>

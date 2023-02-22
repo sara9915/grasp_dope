@@ -20,6 +20,9 @@ from mpl_toolkits import mplot3d
 from sklearn import linear_model
 from numpy import linalg as LA
 import time
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 ### USER PARAMETERS ###
 # camera width, height and intrinsics
@@ -31,24 +34,29 @@ cx = 317.7075500488281
 cy = 238.1421356201172
 focal_length = 0  # 1.93 mm
 
-
 # recognized object parameters
-# absolute path to cad model
-obj_to_load = "/home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/Apple/Apple_4K/food_apple_01_4k.obj"
-obj_name = "apple"  # obj name
-cad_dimension = [0.09756118059158325, 0.08538994193077087,
-                 0.09590171277523041]  # x, y, z, obj cuboid dimensions [m]
+
+# obj_to_load = "/home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/Apple/Apple_4K/food_apple_01_4k.obj" # absolute path to cad model
+# obj_name = "apple"  # obj name
+# cad_dimension = [0.09756118059158325, 0.08538994193077087,0.09590171277523041]  # x, y, z, obj cuboid dimensions [m]
+# mesh_scale = 1 
+
+obj_to_load = "/home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/Zucchina/scene.obj"
+obj_name = "zucchina"  # obj name
+cad_dimension = [0.07375793933868409, 0.05342805862426758,0.25496252059936525]
+mesh_scale = 0.01 
+
 interactive = True
 # [m] max depth value captured by virtual camera in meters
 max_virtual_depth = 5
 
 estimated_pose = PoseStamped()
 
-#Optimization parameters
+# Optimization parameters
 pixel_cad_h = []
 pixel_cad_w = []
 real_useful_depth = []
-tol_optimization = 0.001
+tol_optimization = 0.1
 remove_outliers = True
 
 # Plot parameters
@@ -64,6 +72,7 @@ def scene_initialization_nvisii():
     global obj_to_load, obj_name
     nvisii.initialize(headless=not interactive, verbose=True)
     nvisii.disable_updates()
+    #nvisii.disable_denoiser()
 
     camera = nvisii.entity.create(
         name="camera",
@@ -91,6 +100,7 @@ def scene_initialization_nvisii():
         transform=nvisii.transform.create(obj_name),
         material=nvisii.material.create(obj_name)
     )
+    
     obj_mesh.get_transform().set_parent(camera.get_transform())
 
     nvisii.sample_pixel_area(
@@ -153,7 +163,7 @@ def virtual_depth_map(sigma):
     obj_mesh.get_transform().set_rotation(nvisii.quat(estimated_pose.pose.orientation.w,
                                                       estimated_pose.pose.orientation.x, estimated_pose.pose.orientation.y, estimated_pose.pose.orientation.z))
 
-    obj_mesh.get_transform().set_scale(nvisii.vec3(scale_obj))
+    obj_mesh.get_transform().set_scale(nvisii.vec3(scale_obj*mesh_scale))
 
     virtual_depth_array = nvisii.render_data(
         width=int(width_),
@@ -169,15 +179,20 @@ def virtual_depth_map(sigma):
     virtual_depth_array = np.flipud(virtual_depth_array)
 
 
+
+
 def cost_function(sigma):
     global virtual_depth_array
+    tic1 = time.perf_counter()
 
     # Create virtual depth map based on estimated pose and actual sigma
     virtual_depth_map(sigma)
+    toc1 = time.perf_counter()
+    print(f"virtual depth map realized in {toc1 - tic1:0.4f} seconds")
 
     sum = 0
     num_pixel_obj = 0
-
+    tic1 = time.perf_counter()
     for k in range(len(pixel_cad_h)):
         if (real_useful_depth[k] != 0):  # if depth value isn't an outlier
             i = pixel_cad_h[k]
@@ -189,6 +204,8 @@ def cost_function(sigma):
 
             sum = sum + pow((d-d_hat), 2)
             num_pixel_obj = num_pixel_obj+1
+    toc1 = time.perf_counter()
+    print(f"evaluation cost function realized in {toc1 - tic1:0.4f} seconds")
     try:
         return sum/num_pixel_obj
     except ZeroDivisionError:
@@ -259,22 +276,33 @@ def handle_depth_optimizer(req):
 
     # Initialize the virtual scene
     if not initialized_scene:
+        tic1 = time.perf_counter()
         scene_initialization_nvisii()
+        toc1 = time.perf_counter()
+        print(f"NVISII initialization realized in {toc1 - tic1:0.4f} seconds")
         initialized_scene = True
 
     # Getting useful pixels
+    tic1 = time.perf_counter()
     get_useful_pixels(req.depth_matrix)
+    toc1 = time.perf_counter()
+    print(f"get useful pixels realized in {toc1 - tic1:0.4f} seconds")
 
     # If desired, remove outliers with RANSAC regression
     if remove_outliers:
+        tic1 = time.perf_counter()
         delete_outliers()
+        toc1 = time.perf_counter()
+        print(f"remove outliers realized in {toc1 - tic1:0.4f} seconds")
 
     # Minimize objective function
     bound_scale = 0.8
     sigma_min = -estimated_pose.pose.position.z * bound_scale
     sigma_max = +estimated_pose.pose.position.z * bound_scale
-    res = minimize_scalar(cost_function, bounds=[
-                          sigma_min, sigma_max], tol=tol_optimization)
+    tic1 = time.perf_counter()
+    res = minimize_scalar(cost_function, bounds=[sigma_min, sigma_max], tol=tol_optimization)
+    toc1 = time.perf_counter()
+    print(f"minimization realized in {toc1 - tic1:0.4f} seconds")
 
     toc = time.perf_counter()
     print(f"Optimization realized in {toc - tic:0.4f} seconds")
@@ -322,7 +350,6 @@ def handle_depth_optimizer(req):
     pixel_cad_w = []
     real_useful_depth = []
     virtual_depth_array = []
-    
 
     return depth_optimizerResponse(optimized_pose, scaled_dimension, scale_obj, success)
 

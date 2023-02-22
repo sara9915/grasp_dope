@@ -1,0 +1,6 @@
+<launch>
+    <!-- run planning server -->
+    <node name="planning_server" pkg="grasp_dope" type="planning_server" output="screen" clear_params="true">
+        <remap from="joint_states" to="motoman/joint_states"/>
+    </node>
+</launch>

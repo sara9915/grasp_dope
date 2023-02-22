@@ -153,7 +153,7 @@ include_directories(
 
 
 add_executable(grasp_pose_node src/grasp_pose_node.cpp)
-# add_executable(scene_builder_node src/scene_builder_node.cpp)
+add_executable(scene_builder_node src/scene_builder_node.cpp)
 add_executable(planning_server src/planning_server.cpp)
 add_executable(pick_and_place src/pick_and_place.cpp)
 add_executable(tf_gripper src/tf_gripper.cpp)
@@ -175,9 +175,9 @@ target_link_libraries(grasp_pose_node
   ${catkin_LIBRARIES}
 )
 
-# target_link_libraries(scene_builder_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(scene_builder_node
+  ${catkin_LIBRARIES}
+)
 
 target_link_libraries(planning_server
   ${catkin_LIBRARIES}

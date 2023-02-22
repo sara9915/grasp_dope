@@ -19,7 +19,7 @@
 #define WIDTH 640
 #define HEIGHT 480
 #define DEPTH_SCALE 0.001
-#define SAMPLE_AVERAGE 30
+#define SAMPLE_AVERAGE 1
 
 int sample_pose = 0;
 int sample_depth = 0;
@@ -36,6 +36,7 @@ bool read_depth = false;
 bool read_pose = false;
 
 bool success_srv = true;
+bool optimizer = true;
 
 void estimate_pose_callback(const geometry_msgs::PoseStampedConstPtr &msg)
 {
@@ -189,46 +190,69 @@ bool get_grasp_pose(grasp_dope::desired_grasp_pose_activate::Request &req,
     ROS_INFO_STREAM("Calculating average for depth...");
     average_depth();
 
-    ros::ServiceClient client = nh.serviceClient<grasp_dope::depth_optimizer>("depth_optimizer");
-    grasp_dope::depth_optimizer srv;
-
-    srv.request.depth_matrix.resize(WIDTH * HEIGHT);
-    for (int i = 0; i < WIDTH * HEIGHT; i++)
-      srv.request.depth_matrix[i] = depth_matrix[i];
-
-    srv.request.estimated_pose = estimated_pose_msg;
-    ros::service::waitForService("/depth_optimizer");
-
-    if (client.call(srv))
+    if (optimizer == true)
     {
-      if (srv.response.success)
+
+      calculate_pose(estimated_pose_msg);
+      ROS_INFO_STREAM("Grasp pose NOT OPTIMIZED: ");
+      ROS_INFO_STREAM(grasp_pose_msg);
+
+      ros::ServiceClient client = nh.serviceClient<grasp_dope::depth_optimizer>("depth_optimizer");
+      grasp_dope::depth_optimizer srv;
+
+      srv.request.depth_matrix.resize(WIDTH * HEIGHT);
+      for (int i = 0; i < WIDTH * HEIGHT; i++)
+        srv.request.depth_matrix[i] = depth_matrix[i];
+
+      srv.request.estimated_pose = estimated_pose_msg;
+      ros::service::waitForService("/depth_optimizer");
+
+      if (client.call(srv))
       {
-        optimized_pose_msg = srv.response.refined_pose;
+        if (srv.response.success)
+        {
+          optimized_pose_msg = srv.response.refined_pose;
+        }
+        else
+        {
+          ROS_INFO_STREAM("Optimization failed!");
+          optimized_pose_msg = srv.response.refined_pose;
+        }
+        calculate_pose(optimized_pose_msg);
+        ROS_INFO_STREAM("Grasp pose: ");
+        ROS_INFO_STREAM(grasp_pose_msg);
+        success_srv = true;
+        res.refined_pose = grasp_pose_msg;
+        res.scaled_cuboid_dimensions = srv.response.scaled_cuboid_dimension;
+        res.scale_obj = srv.response.scale_obj;
+        ROS_INFO_STREAM("sclae_obj: " << srv.response.scale_obj);
+        ROS_INFO_STREAM("cad dimension scaled: ");
+        for (int i=0; i<3; i++)
+        {
+            ROS_INFO_STREAM(srv.response.scaled_cuboid_dimension.at(i));
+        }
+        
       }
       else
       {
-        ROS_INFO_STREAM("Optimization failed!");
-        optimized_pose_msg = srv.response.refined_pose;
+        ROS_ERROR("Failed to call service");
+        return 1;
       }
-      calculate_pose(optimized_pose_msg);
     }
     else
     {
-      ROS_ERROR("Failed to call service");
-      return 1;
+      calculate_pose(estimated_pose_msg);
+      ROS_INFO_STREAM("Grasp pose: ");
+      ROS_INFO_STREAM(grasp_pose_msg);
+      success_srv = true;
+      res.refined_pose = grasp_pose_msg;
+      // res.scaled_cuboid_dimensions = srv.response.scaled_cuboid_dimension;
+      // res.scale_obj = srv.response.scale_obj;
     }
-
     read_depth = false;
     read_pose = false;
     sample_pose = 0;
     sample_depth = 0;
-
-    ROS_INFO_STREAM("Grasp pose: ");
-    ROS_INFO_STREAM(grasp_pose_msg);
-    success_srv = true;
-    res.refined_pose = grasp_pose_msg;
-    res.scaled_cuboid_dimensions = srv.response.scaled_cuboid_dimension;
-    res.scale_obj = srv.response.scale_obj;
     return true;
   }
   else
