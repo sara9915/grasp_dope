@@ -12,18 +12,18 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     /* Calling building_scene service */
-    {
-        ROS_INFO_STREAM("--- Activating building_scene service ---");
-        ros::service::waitForService("/build_scene");
-        std_srvs::Trigger::Request req;
-        req = {};
-        std_srvs::Trigger::Response res;
-        if (!ros::service::call<std_srvs::Trigger::Request, std_srvs::Trigger::Response>("/build_scene", req, res))
-        {
-            ROS_INFO_STREAM("Error Creating scene...");
-            return -1;
-        }
-    }
+    // {
+    //     ROS_INFO_STREAM("--- Activating building_scene service ---");
+    //     ros::service::waitForService("/build_scene");
+    //     std_srvs::Trigger::Request req;
+    //     req = {};
+    //     std_srvs::Trigger::Response res;
+    //     if (!ros::service::call<std_srvs::Trigger::Request, std_srvs::Trigger::Response>("/build_scene", req, res))
+    //     {
+    //         ROS_INFO_STREAM("Error Creating scene...");
+    //         return -1;
+    //     }
+    // }
 
     /*Activating get_grasp_pose service*/
     std::cout << "Press Enter to Start";
@@ -66,13 +66,6 @@ int main(int argc, char **argv)
     /* Planning and execute to pre_grasp_pose*/
     ac.sendGoalAndWait(goal);
     ROS_INFO_STREAM(ac.getResult()->success);
-
-    // ros::Publisher grasp_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/grasp_pose",1);
-
-    // while(ros::ok())
-    // {
-    //     grasp_pose_pub.publish(grasp_pose);
-    // }
 
     // ros::spin();
     return 0;

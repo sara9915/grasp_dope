@@ -19,10 +19,12 @@
 #define WIDTH 640
 #define HEIGHT 480
 #define DEPTH_SCALE 0.001
-#define SAMPLE_AVERAGE 1
+#define SAMPLE_AVERAGE 30
 
 int sample_pose = 0;
 int sample_depth = 0;
+
+std::string object_name;
 
 geometry_msgs::PoseStamped estimated_pose_msgs[SAMPLE_AVERAGE];
 sensor_msgs::Image depth_msgs[SAMPLE_AVERAGE];
@@ -175,7 +177,8 @@ bool get_grasp_pose(grasp_dope::desired_grasp_pose_activate::Request &req,
   {
     ros::NodeHandle nh;
     ros::Subscriber aligned_depth_sub = nh.subscribe("/camera/aligned_depth_to_color/image_raw", 1, &depth_callback);
-    ros::Subscriber estimated_pose_sub = nh.subscribe("/dope/pose_obj", 1, &estimate_pose_callback);
+    std::string topic_dope_pose = "/dope/pose_" + object_name;
+    ros::Subscriber estimated_pose_sub = nh.subscribe(topic_dope_pose, 1, &estimate_pose_callback);
     geometry_msgs::PoseStamped optimized_pose_msg;
 
     /* Reading detected object pose in camera frame */
@@ -225,7 +228,7 @@ bool get_grasp_pose(grasp_dope::desired_grasp_pose_activate::Request &req,
         res.refined_pose = grasp_pose_msg;
         res.scaled_cuboid_dimensions = srv.response.scaled_cuboid_dimension;
         res.scale_obj = srv.response.scale_obj;
-        ROS_INFO_STREAM("sclae_obj: " << srv.response.scale_obj);
+        ROS_INFO_STREAM("scale_obj: " << srv.response.scale_obj);
         ROS_INFO_STREAM("cad dimension scaled: ");
         for (int i=0; i<3; i++)
         {
@@ -267,6 +270,8 @@ int main(int argc, char **argv)
   ros::NodeHandle n;
   ros::AsyncSpinner spinner(0);
   spinner.start();
+
+  ros::param::get("/dope/object_of_interest", object_name);
 
   /* This service is used to activate this node: it must be activated only if manipulator is stopped*/
   ros::ServiceServer service = n.advertiseService("/get_grasp_pose_service", get_grasp_pose);

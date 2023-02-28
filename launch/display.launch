@@ -1,5 +1,5 @@
 <launch>
-  <arg name="model" default="$(find grasp_dope)/urdf/yaskawa_wth_gripper.xacro"/>
+  <arg name="model" default="$(find grasp_dope)/urdf/yaskawa_wth_gripper_30_96.xacro"/>
   <arg name="gui" default="true"/>
   <arg name="rvizconfig" default="$(find grasp_dope)/launch/urdf.rviz"/>
   <param name="robot_description" command="$(find xacro)/xacro $(arg model)"/>

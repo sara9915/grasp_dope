@@ -6,7 +6,7 @@
 
         <!-- run grasp_pose_node -->
     <node name="grasp_pose_node" pkg="grasp_dope" type="grasp_pose_node" output="screen">
-        <remap from="/dope/pose_obj" to="/dope/pose_Zucchina"/>
+        <!-- <remap from="/dope/pose_banana" to="/dope/pose_obj"/> -->
     </node>
 
         <!-- run depth_optimizer -->

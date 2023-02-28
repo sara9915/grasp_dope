@@ -4,6 +4,7 @@
 #include <trajectory_msgs/JointTrajectory.h>
 #include <wsg_32_common/Move.h>
 #include <std_srvs/Empty.h>
+#include <grasp_dope/quintic_traj.h>
 
 #include <grasp_dope/goal_pose_plan_Action.h>
 #include <actionlib/server/simple_action_server.h>
@@ -28,7 +29,9 @@ bool success_planning_pp = false;
 bool success;
 double rate = 50; // Hz
 vision_msgs::Detection3DArrayConstPtr box_size;
-double mesh_scale = 0.01;
+std::string object_name;
+double mesh_scale;
+std::string mesh_path;
 std::vector<double> homing;
 
 moveit::planning_interface::MoveGroupInterface::Plan planning_joint(const geometry_msgs::Pose &target_pose, moveit::planning_interface::MoveGroupInterface &move_group_interface) //, moveit::planning_interface::MoveGroupInterface::Plan &my_plan)
@@ -37,7 +40,7 @@ moveit::planning_interface::MoveGroupInterface::Plan planning_joint(const geomet
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
 
     move_group_interface.setMaxVelocityScalingFactor(0.05);
-    move_group_interface.setPlanningTime(5);
+    move_group_interface.setPlanningTime(2);
     move_group_interface.setPlannerId("RRTstarkConfigDefault");
 
     success = (move_group_interface.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
@@ -49,7 +52,7 @@ moveit::planning_interface::MoveGroupInterface::Plan planning_joint(const geomet
 auto planning_cartesian(const geometry_msgs::Pose &target_pose, moveit::planning_interface::MoveGroupInterface &move_group_interface) //, moveit::planning_interface::MoveGroupInterface::Plan &my_plan)
 {
     move_group_interface.setPoseTarget(target_pose, "end_effector_tool0");
-    move_group_interface.setPlanningTime(15);
+    move_group_interface.setPlanningTime(2);
     // move_group_interface.setPoseReferenceFrame("end_effector_tool0");
     std::vector<geometry_msgs::Pose> waypoints;
 
@@ -75,7 +78,7 @@ auto get_tool_pose(const geometry_msgs::Pose &pose)
 {
     Eigen::Isometry3d T_TE; // omogeneous transfrom from tool0 to end-effector_tool0
     T_TE.translation().x() = 0.0;
-    T_TE.translation().y() = -0.0055;
+    T_TE.translation().y() = -0.0;
     T_TE.translation().z() = -0.21;
 
     Eigen::Quaterniond q_EB(pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
@@ -107,8 +110,8 @@ void attach_obj(std::string obj_id, std::string frame_id, moveit::planning_inter
     moveit_msgs::CollisionObject object_to_attach;
 
     scale_obj = scale_obj * mesh_scale;
-    if (scale_obj > 0.95)
-        scale_obj = scale_obj * 0.80;
+    // if (scale_obj > 0.95)
+    //     scale_obj = scale_obj * 0.80;
     Eigen::Vector3d scale(scale_obj, scale_obj, scale_obj);
 
     object_to_attach.id = obj_id;
@@ -117,7 +120,9 @@ void attach_obj(std::string obj_id, std::string frame_id, moveit::planning_inter
     object_to_attach.header.frame_id = frame_id;
 
     // shapes::Mesh *m = shapes::createMeshFromResource("file:///home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/Apple/Apple_4K/food_apple_01_4k.stl", scale);
-    shapes::Mesh *m = shapes::createMeshFromResource("file:///home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/Zucchina/scene.obj", scale);
+    // shapes::Mesh *m = shapes::createMeshFromResource("file:///home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/banana/banana2_centered.obj", scale);
+    // ROS_INFO_STREAM("file:///home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/banana/banana_16/banana_centered_scaled.obj");
+    shapes::Mesh *m = shapes::createMeshFromResource("file://" + mesh_path, scale);
 
     shape_msgs::Mesh mesh;
     shapes::ShapeMsg mesh_msg;
@@ -137,59 +142,6 @@ void attach_obj(std::string obj_id, std::string frame_id, moveit::planning_inter
     planning_scene_interface.applyCollisionObject(object_to_attach);
 
     move_group_interface.attachObject(object_to_attach.id, "end_effector_tool0");
-}
-
-void update_coeff(Eigen::Matrix<double, 6, 7> &coeff, const double &tf, const std::vector<double> &qi, const std::vector<double> &qi_dot, const std::vector<double> &qi_dot_dot, const std::vector<double> &qf, const std::vector<double> &qf_dot, const std::vector<double> &qf_dot_dot, const double &num_points_traj)
-{
-    double tf_2 = pow(tf, 2);
-    double tf_3 = pow(tf, 3);
-    double tf_4 = pow(tf, 4);
-    double tf_5 = pow(tf, 5);
-
-    Eigen::Matrix3d A;
-    A << 20.0 * tf_3, 12.0 * tf_2, 6.0 * tf,
-        5.0 * tf_4, 4.0 * tf_3, 3.0 * tf_2,
-        tf_5, tf_4, tf_3;
-
-    Eigen::Vector3d b;
-    Eigen::Vector3d coeff_calc;
-
-    for (int j = 0; j < coeff.cols(); j++)
-    {
-        coeff(5, j) = qi[j];               // a0
-        coeff(4, j) = qi_dot[j];           // a1
-        coeff(3, j) = qi_dot_dot[j] / 2.0; // a2
-
-        b(0) = qf_dot_dot[j] - qi_dot_dot[j];
-        b(1) = qf_dot[j] - qi_dot[j] - qi_dot_dot[j] * tf;
-        b(2) = qf[j] - qi[j] - qi_dot[j] * tf - qi_dot_dot[j] * tf_2 / 2.0;
-
-        coeff_calc = A.inverse() * b;
-
-        coeff(0, j) = coeff_calc[0]; // a5
-        coeff(1, j) = coeff_calc[1]; // a4
-        coeff(2, j) = coeff_calc[2]; // a3
-    }
-}
-
-double quintic_q(const double &t, const Eigen::Matrix<double, 6, 7> &coeff, const int &i)
-{
-    double t_2 = pow(t, 2);
-    double t_3 = pow(t, 3);
-    double t_4 = pow(t, 4);
-    double t_5 = pow(t, 5);
-
-    return (coeff(0, i) * t_5 + coeff(1, i) * t_4 + coeff(2, i) * t_3 + coeff(3, i) * t_2 + coeff(4, i) * t + coeff(5, i));
-}
-
-double quintic_qdot(const double &t, const Eigen::Matrix<double, 6, 7> &coeff, const int &i)
-{
-    double t_2 = pow(t, 2);
-    double t_3 = pow(t, 3);
-    double t_4 = pow(t, 4);
-    double t_5 = pow(t, 5);
-
-    return (coeff(0, i) * 5 * t_4 + coeff(1, i) * 4 * t_3 + coeff(2, i) * 3 * t_2 + coeff(3, i) * 2 * t + coeff(4, i));
 }
 
 void execute_trajectory(const moveit_msgs::RobotTrajectory &my_plan, ros::NodeHandle &nh, bool scale)
@@ -341,7 +293,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
 
     int attempt = 0;
     std::vector<std::string> obj_id;
-    obj_id.push_back("obj");
+    obj_id.push_back(object_name);
 
     while (!success_planning_pp && attempt < pre_grasp_attemp_vector.size())
     {
@@ -436,7 +388,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                     {
                         std::cout << "Planning successfully completed. Press ENTER to continue...";
                         std::cin.ignore();
-                        move_group_interface->detachObject("obj");
+                        move_group_interface->detachObject(object_name);
                         planning_scene_interface->removeCollisionObjects(obj_id);
                         success_planning_pp = true;
                         attempt = 0;
@@ -445,7 +397,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                     {
                         ROS_INFO_STREAM("Try with other pre-grasp pose...");
                         attempt = attempt + 1;
-                        move_group_interface->detachObject("obj");
+                        move_group_interface->detachObject(object_name);
                         planning_scene_interface->removeCollisionObjects(obj_id);
                     }
                 }
@@ -453,7 +405,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                 {
                     ROS_INFO_STREAM("Try with other pre-grasp pose...");
                     attempt = attempt + 1;
-                    move_group_interface->detachObject("obj");
+                    move_group_interface->detachObject(object_name);
                     planning_scene_interface->removeCollisionObjects(obj_id);
                 }
             }
@@ -529,7 +481,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
             ROS_INFO_STREAM("Error activating service move gripper...");
             return -1;
         }
-        move_group_interface->detachObject("obj");
+        move_group_interface->detachObject(object_name);
 
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
@@ -593,15 +545,6 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
     Eigen::Matrix3d rotation_alpha;
     Eigen::Matrix3d rotation_theta;
 
-    double alpha = 0.0;   // rotazione attorno all'oggetto
-    double theta = 0.0;   // inclinazione rispetto all'oggetto
-    double offset = 0.12; // offset pre-grasp
-
-    rotation_start << 0, -1, 0,
-        -1, 0, 0,
-        0, 0, -1;
-    int rotation_attempt = 8;
-    int inclination_attempt = 4;
     ros::NodeHandle temp;
     ros::Publisher pre_grasp_attempt_pub = temp.advertise<geometry_msgs::PoseStamped>("/attempt", 1);
     ros::Publisher pose_obj_pub = temp.advertise<geometry_msgs::PoseStamped>("/pose_obj_refined", 1);
@@ -610,57 +553,129 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
     geometry_msgs::PoseStamped grasp_pose_stamped;
 
     /* Clear octomap to start planning */
-    ros::service::waitForService("/clear_octomap");
-    std_srvs::Empty::Request req;
-    std_srvs::Empty::Response res;
-    if (!ros::service::call<std_srvs::Empty::Request, std_srvs::Empty::Response>("/clear_octomap", req, res))
+    // ros::service::waitForService("/clear_octomap");
+    // std_srvs::Empty::Request req;
+    // std_srvs::Empty::Response res;
+    // if (!ros::service::call<std_srvs::Empty::Request, std_srvs::Empty::Response>("/clear_octomap", req, res))
+    // {
+    //     ROS_INFO_STREAM("Error activating service clear_octomap...");
+    //     return -1;
+    // }
+
+    geometry_msgs::Pose obj_pose_ = goal->goal_pose_pick.pose;
+
+    if (object_name == "banana")
     {
-        ROS_INFO_STREAM("Error activating service clear_octomap...");
-        return -1;
+        Eigen::Quaterniond orientation_OW(goal->goal_pose_pick.pose.orientation.w, goal->goal_pose_pick.pose.orientation.x, goal->goal_pose_pick.pose.orientation.y, goal->goal_pose_pick.pose.orientation.z);
+        Eigen::Vector3d translation_OW(goal->goal_pose_pick.pose.position.x, goal->goal_pose_pick.pose.position.y, goal->goal_pose_pick.pose.position.z);
+        Eigen::Matrix3d rotation_OW(orientation_OW);
+        Eigen::Vector3d grasp_banana(0, -0.01, 0);
+        Eigen::Vector3d tmp = rotation_OW * grasp_banana;
+        obj_pose_.position.x = obj_pose_.position.x + tmp(0);
+        obj_pose_.position.y = obj_pose_.position.y + tmp(1);
+        obj_pose_.position.z = obj_pose_.position.z + tmp(2);
+
+        int inclination_attempt = 4;
+        int points_attempt = 3;
+
+        double theta = 0.0;   // inclinazione rispetto all'oggetto
+        double offset = 0.12; // offset pre-grasp
+
+        Eigen::Matrix3d rotation_GO;
+
+        if (rotation_OW(2, 0) >= 0)
+        {
+            rotation_GO << 0, 0, -1,
+                0, -1, 0,
+                -1, 0, 0;
+        }
+        else
+        {
+            rotation_GO << 0, 0, 1,
+                0, 1, 0,
+                -1, 0, 0;
+        }
+
+        rotation_start = rotation_OW * rotation_GO;
+
+        for (int i = 0; i < points_attempt; i++)
+        {
+            for (int k = 0; k < inclination_attempt; k++)
+            {
+                theta = (i * M_PI / (3 * inclination_attempt));
+                if (rotation_OW(1, 2) < 0)
+                {
+                    theta = -theta;
+                }
+
+                /* Rotazione attorno all'asse y */
+                rotation_theta << cos(theta), 0, sin(theta),
+                    0, 1, 0,
+                    -sin(theta), 0, cos(theta);
+
+                Eigen::Quaterniond q_(rotation_start * rotation_theta);
+                pre_grasp_attemp.orientation.w = q_.w();
+                pre_grasp_attemp.orientation.x = q_.x();
+                pre_grasp_attemp.orientation.y = q_.y();
+                pre_grasp_attemp.orientation.z = q_.z();
+
+                pre_grasp_attemp_vector.push_back(pre_grasp_attemp);
+            }
+        }
     }
 
-    for (int i = 1; i < inclination_attempt; i++)
+    else
     {
-        theta = (i * M_PI / (3 * inclination_attempt));
+        double alpha = 0.0;   // rotazione attorno all'oggetto
+        double theta = 0.0;   // inclinazione rispetto all'oggetto
+        double offset = 0.12; // offset pre-grasp
 
-        /* Rotazione attorno all'asse y */
-        rotation_theta << cos(theta), 0, sin(theta),
-            0, 1, 0,
-            -sin(theta), 0, cos(theta);
-
-        for (int k = 0; k < rotation_attempt; k++)
+        rotation_start << 0, -1, 0,
+            -1, 0, 0,
+            0, 0, -1;
+        int rotation_attempt = 8;
+        int inclination_attempt = 4;
+        for (int i = 2; i < inclination_attempt; i++)
         {
-            if (k < rotation_attempt / 2)
-                alpha = (k * M_PI / rotation_attempt); //- M_PI_2;
-            else
-                alpha = (k - floor(rotation_attempt / 2) * M_PI / rotation_attempt) - M_PI_2;
+            theta = (i * M_PI / (3 * inclination_attempt));
 
-            pre_grasp_attemp.position.x = goal->goal_pose_pick.pose.position.x + offset * sin(theta) * sin(alpha);
-            pre_grasp_attemp.position.y = goal->goal_pose_pick.pose.position.y + offset * sin(theta) * cos(alpha);
-            pre_grasp_attemp.position.z = goal->goal_pose_pick.pose.position.z + offset * cos(theta);
+            /* Rotazione attorno all'asse y */
+            rotation_theta << cos(theta), 0, sin(theta),
+                0, 1, 0,
+                -sin(theta), 0, cos(theta);
 
-            /* Matrice di rotazione attorno all'asse z */
-            rotation_alpha << cos(alpha), -sin(alpha), 0,
-                sin(alpha), cos(alpha), 0,
-                0, 0, 1;
+            for (int k = 0; k < rotation_attempt; k++)
+            {
+                if (k < rotation_attempt / 2)
+                    alpha = (k * M_PI / rotation_attempt); //- M_PI_2;
+                else
+                    alpha = (k - floor(rotation_attempt / 2) * M_PI / rotation_attempt) - M_PI_2;
 
-            Eigen::Quaterniond q_(rotation_start * rotation_alpha * rotation_theta);
-            pre_grasp_attemp.orientation.w = q_.w();
-            pre_grasp_attemp.orientation.x = q_.x();
-            pre_grasp_attemp.orientation.y = q_.y();
-            pre_grasp_attemp.orientation.z = q_.z();
+                pre_grasp_attemp.position.x = obj_pose_.position.x + offset * sin(theta) * sin(alpha);
+                pre_grasp_attemp.position.y = obj_pose_.position.y + offset * sin(theta) * cos(alpha);
+                pre_grasp_attemp.position.z = obj_pose_.position.z + offset * cos(theta);
 
-            pre_grasp_attemp_vector.push_back(pre_grasp_attemp);
+                /* Matrice di rotazione attorno all'asse z */
+                rotation_alpha << cos(alpha), -sin(alpha), 0,
+                    sin(alpha), cos(alpha), 0,
+                    0, 0, 1;
+
+                Eigen::Quaterniond q_(rotation_start * rotation_alpha * rotation_theta);
+                pre_grasp_attemp.orientation.w = q_.w();
+                pre_grasp_attemp.orientation.x = q_.x();
+                pre_grasp_attemp.orientation.y = q_.y();
+                pre_grasp_attemp.orientation.z = q_.z();
+
+                pre_grasp_attemp_vector.push_back(pre_grasp_attemp);
+            }
         }
     }
 
     int attempt = 0;
     std::vector<std::string> obj_id;
-    obj_id.push_back("obj");
+    obj_id.push_back(object_name);
 
     // Parameters for attach obj
-    // for different colors:
-
     geometry_msgs::Pose attach_obj_pose;
     attach_obj_pose.position.x = goal->goal_pose_pick.pose.position.x;
     attach_obj_pose.position.y = goal->goal_pose_pick.pose.position.y;
@@ -670,14 +685,16 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
     attach_obj_pose.orientation.y = goal->goal_pose_pick.pose.orientation.y;
     attach_obj_pose.orientation.z = goal->goal_pose_pick.pose.orientation.z;
     float scale_obj = goal->scale_obj;
-    
 
-    //attach_obj("obj", "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
-    //move_group_interface->detachObject("obj");
-    auto dope_pose = ros::topic::waitForMessage<geometry_msgs::PoseStamped>("/dope/pose_obj");
+    attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
+    move_group_interface->detachObject(object_name);
+
+    // std::string topic_dope_pose = "/dope/pose_" + object_name;
+    // auto dope_pose = ros::topic::waitForMessage<geometry_msgs::PoseStamped>(topic_dope_pose);
+
     // obj non ottimizato
-    //attach_obj("dope_obj", dope_pose->header.frame_id, *move_group_interface, *planning_scene_interface, dope_pose->pose, 1);
-    //move_group_interface->detachObject("dope_obj");
+    // attach_obj("dope_obj", dope_pose->header.frame_id, *move_group_interface, *planning_scene_interface, dope_pose->pose, 1);
+    // move_group_interface->detachObject("dope_obj");
 
     while (!success_planning_pp && attempt < pre_grasp_attemp_vector.size())
     {
@@ -692,7 +709,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
 
         pre_grasp_pose = pre_grasp_attemp_vector.at(attempt);
 
-        grasp_pose = goal->goal_pose_pick.pose;
+        grasp_pose = obj_pose_;
         grasp_pose.position.z = grasp_pose.position.z;
         grasp_pose_stamped.pose = grasp_pose;
         grasp_pose_stamped.header.frame_id = "base_link";
@@ -744,7 +761,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             {
                 std::cout << "Press Enter to Continue";
                 std::cin.ignore();
-                attach_obj("obj", "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
+                attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
                 /* Planning to post grasp pose */
                 ROS_INFO_STREAM("--- Post grasp pose --- "
                                 << "\n"
@@ -768,7 +785,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
                 {
                     ROS_INFO_STREAM("Try with other pre-grasp pose...");
                     attempt = attempt + 1;
-                    move_group_interface->detachObject("obj");
+                    move_group_interface->detachObject(object_name);
                     // planning_scene_interface->removeCollisionObjects(obj_id);
                 }
             }
@@ -776,7 +793,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             {
                 ROS_INFO_STREAM("Try with other pre-grasp pose...");
                 attempt = attempt + 1;
-                move_group_interface->detachObject("obj");
+                move_group_interface->detachObject(object_name);
                 // planning_scene_interface->removeCollisionObjects(obj_id);
             }
         }
@@ -786,7 +803,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             attempt = attempt + 1;
         }
     }
-    move_group_interface->detachObject("obj");
+    move_group_interface->detachObject(object_name);
     // planning_scene_interface->removeCollisionObjects(obj_id);
     result.success = success;
     as->setSucceeded(result);
@@ -814,7 +831,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
         slipping_control.slipping_avoidance();
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
-        attach_obj("obj", "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
+        attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
 
         ROS_INFO_STREAM("Executing trajectory post grasp...");
         execute_trajectory(plan_post_grasp, *nh, true);
@@ -853,7 +870,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             ROS_INFO_STREAM("Error planning");
         }
     }
-    move_group_interface->detachObject("obj");
+    move_group_interface->detachObject(object_name);
     planning_scene_interface->removeCollisionObjects(obj_id);
     success_planning_pp = false;
     return true;
@@ -866,6 +883,12 @@ int main(int argc, char **argv)
 
     ros::AsyncSpinner spinner(0);
     spinner.start();
+
+    ros::param::get("/dope/object_of_interest", object_name);
+    const std::string mesh_scale_string = "/dope/mesh_scales/" + object_name;
+    const std::string mesh_path_string = "/dope/meshes/" + object_name;
+    ros::param::get(mesh_path_string, mesh_path);
+    ros::param::get(mesh_scale_string, mesh_scale);
 
     /* Parametri per la costruzione della scena */
     static const std::string PLANNING_GROUP = "yaskawa_arm";

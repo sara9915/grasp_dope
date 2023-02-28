@@ -22,7 +22,7 @@ from numpy import linalg as LA
 import time
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 ### USER PARAMETERS ###
 # camera width, height and intrinsics
@@ -39,12 +39,18 @@ focal_length = 0  # 1.93 mm
 # obj_to_load = "/home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/Apple/Apple_4K/food_apple_01_4k.obj" # absolute path to cad model
 # obj_name = "apple"  # obj name
 # cad_dimension = [0.09756118059158325, 0.08538994193077087,0.09590171277523041]  # x, y, z, obj cuboid dimensions [m]
-# mesh_scale = 1 
+# mesh_scale = 1
+object_name = rospy.get_param("/dope/object_of_interest")
+obj_to_load = rospy.get_param("/dope/meshes")[object_name]   
+cad_dimension = rospy.get_param("/dope/dimensions")[object_name] # cm
+mesh_scale = rospy.get_param("/dope/mesh_scales")[object_name] 
 
-obj_to_load = "/home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/Zucchina/scene.obj"
-obj_name = "zucchina"  # obj name
-cad_dimension = [0.07375793933868409, 0.05342805862426758,0.25496252059936525]
-mesh_scale = 0.01 
+#CAD dimension in meters
+cad_dimension[0] = cad_dimension[0] * 0.01
+cad_dimension[1] = cad_dimension[1] * 0.01
+cad_dimension[2] = cad_dimension[2] * 0.01
+
+
 
 interactive = True
 # [m] max depth value captured by virtual camera in meters
@@ -60,7 +66,7 @@ tol_optimization = 0.1
 remove_outliers = True
 
 # Plot parameters
-get_plot = False
+get_plot = True
 sigma_min = -0.001
 sigma_max = 0.001
 
@@ -69,10 +75,10 @@ initialized_scene = False
 
 
 def scene_initialization_nvisii():
-    global obj_to_load, obj_name
+    global obj_to_load, object_name
     nvisii.initialize(headless=not interactive, verbose=True)
     nvisii.disable_updates()
-    #nvisii.disable_denoiser()
+    # nvisii.disable_denoiser()
 
     camera = nvisii.entity.create(
         name="camera",
@@ -95,12 +101,12 @@ def scene_initialization_nvisii():
     nvisii.set_camera_entity(camera)
 
     obj_mesh = nvisii.entity.create(
-        name=obj_name,
-        mesh=nvisii.mesh.create_from_file(obj_name, obj_to_load),
-        transform=nvisii.transform.create(obj_name),
-        material=nvisii.material.create(obj_name)
+        name=object_name,
+        mesh=nvisii.mesh.create_from_file(object_name, obj_to_load),
+        transform=nvisii.transform.create(object_name),
+        material=nvisii.material.create(object_name)
     )
-    
+
     obj_mesh.get_transform().set_parent(camera.get_transform())
 
     nvisii.sample_pixel_area(
@@ -146,7 +152,7 @@ def convert_from_uvd(v, u, d, fx, fy, cx, cy):
 def virtual_depth_map(sigma):
     global virtual_depth_array
 
-    obj_mesh = nvisii.entity.get(obj_name)
+    obj_mesh = nvisii.entity.get(object_name)
 
     x = estimated_pose.pose.position.x
     y = -estimated_pose.pose.position.y
@@ -160,8 +166,9 @@ def virtual_depth_map(sigma):
 
     obj_mesh.get_transform().set_position(p_new)
 
-    obj_mesh.get_transform().set_rotation(nvisii.quat(estimated_pose.pose.orientation.w,
-                                                      estimated_pose.pose.orientation.x, estimated_pose.pose.orientation.y, estimated_pose.pose.orientation.z))
+    rotation_flip = nvisii.angleAxis(-nvisii.pi(),nvisii.vec3(1,0,0)) * nvisii.quat(estimated_pose.pose.orientation.w,
+                                                      estimated_pose.pose.orientation.x, estimated_pose.pose.orientation.y, estimated_pose.pose.orientation.z)
+    obj_mesh.get_transform().set_rotation(rotation_flip)
 
     obj_mesh.get_transform().set_scale(nvisii.vec3(scale_obj*mesh_scale))
 
@@ -177,8 +184,6 @@ def virtual_depth_map(sigma):
     virtual_depth_array = np.array(
         virtual_depth_array).reshape(height_, width_, 4)
     virtual_depth_array = np.flipud(virtual_depth_array)
-
-
 
 
 def cost_function(sigma):
@@ -300,7 +305,8 @@ def handle_depth_optimizer(req):
     sigma_min = -estimated_pose.pose.position.z * bound_scale
     sigma_max = +estimated_pose.pose.position.z * bound_scale
     tic1 = time.perf_counter()
-    res = minimize_scalar(cost_function, bounds=[sigma_min, sigma_max], tol=tol_optimization)
+    res = minimize_scalar(cost_function, bounds=[
+                          sigma_min, sigma_max], tol=tol_optimization)
     toc1 = time.perf_counter()
     print(f"minimization realized in {toc1 - tic1:0.4f} seconds")
 
