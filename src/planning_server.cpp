@@ -521,6 +521,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
 
 bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::SimpleActionServer<grasp_dope::goal_pose_plan_Action> *as, ros::NodeHandle *nh, moveit::planning_interface::MoveGroupInterface *move_group_interface, moveit::planning_interface::PlanningSceneInterface *planning_scene_interface, const moveit::core::JointModelGroup *joint_model_group, moveit::core::RobotStatePtr &kinematic_state)
 {
+    float scale_obj = goal->scale_obj;
     // create messages that are used to published feedback/result
     grasp_dope::goal_pose_plan_Feedback feedback;
     grasp_dope::goal_pose_plan_Result result;
@@ -562,24 +563,32 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
     //     return -1;
     // }
 
-    geometry_msgs::Pose obj_pose_ = goal->goal_pose_pick.pose;
+    std::vector<geometry_msgs::Pose> obj_pose_vector;
+    geometry_msgs::Pose obj_pose_= goal->goal_pose_pick.pose;
+    
+    double theta = 0.0;   // inclinazione rispetto all'oggetto
+    double offset = 0.12; // offset pre-grasp
 
     if (object_name == "banana")
     {
+        std::vector<double> cad_dimensions;
+        cad_dimensions.resize(3);
+        ros::param::get("/dope/dimensions/" + object_name, cad_dimensions);
+        cad_dimensions.at(0) = cad_dimensions.at(0) * 0.01 * scale_obj;
+        cad_dimensions.at(1) = cad_dimensions.at(1) * 0.01 * scale_obj;
+        cad_dimensions.at(2) = cad_dimensions.at(2) * 0.01 * scale_obj;
+
         Eigen::Quaterniond orientation_OW(goal->goal_pose_pick.pose.orientation.w, goal->goal_pose_pick.pose.orientation.x, goal->goal_pose_pick.pose.orientation.y, goal->goal_pose_pick.pose.orientation.z);
         Eigen::Vector3d translation_OW(goal->goal_pose_pick.pose.position.x, goal->goal_pose_pick.pose.position.y, goal->goal_pose_pick.pose.position.z);
         Eigen::Matrix3d rotation_OW(orientation_OW);
         Eigen::Vector3d grasp_banana(0, -0.01, 0);
         Eigen::Vector3d tmp = rotation_OW * grasp_banana;
-        obj_pose_.position.x = obj_pose_.position.x + tmp(0);
-        obj_pose_.position.y = obj_pose_.position.y + tmp(1);
-        obj_pose_.position.z = obj_pose_.position.z + tmp(2);
+        // obj_pose_.position.x = obj_pose_.position.x + tmp(0);
+        // obj_pose_.position.y = obj_pose_.position.y + tmp(1);
+        // obj_pose_.position.z = obj_pose_.position.z + tmp(2);
 
         int inclination_attempt = 4;
         int points_attempt = 3;
-
-        double theta = 0.0;   // inclinazione rispetto all'oggetto
-        double offset = 0.12; // offset pre-grasp
 
         Eigen::Matrix3d rotation_GO;
 
@@ -598,11 +607,35 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
 
         rotation_start = rotation_OW * rotation_GO;
 
-        for (int i = 0; i < points_attempt; i++)
+        std::vector<double> attempt_position;
+        float min_ = cad_dimensions.at(2) / 2 - cad_dimensions.at(2) / 4;
+        float max_ = cad_dimensions.at(2) / 2 + cad_dimensions.at(2) / 4;
+
+        for (int i = round(points_attempt/2); i < points_attempt; i++)
         {
-            for (int k = 0; k < inclination_attempt; k++)
+            attempt_position.push_back((min_ + i * (max_ - min_) / points_attempt)-cad_dimensions.at(2)/2);
+        }
+        for (int i = 0; i <= round(points_attempt/2); i++)
+        {
+            attempt_position.push_back((min_ + i * (max_ - min_) / points_attempt)-cad_dimensions.at(2)/2); 
+        }
+
+        for (int i = 0; i < attempt_position.size(); i++)
+        {
+            ROS_INFO_STREAM(attempt_position.at(i));
+            Eigen::Vector3d grasp_banana(0, -0.01, attempt_position.at(i));
+            tmp = rotation_OW * grasp_banana;
+            obj_pose_.position.x = obj_pose_.position.x + tmp(0);
+            obj_pose_.position.y = obj_pose_.position.y + tmp(1);
+            obj_pose_.position.z = obj_pose_.position.z + tmp(2);
+            obj_pose_.position.z = obj_pose_.position.z + 0.015;
+            
+            pre_grasp_attemp.position = obj_pose_.position;
+            pre_grasp_attemp.position.z = pre_grasp_attemp.position.z + offset;
+
+            for (int k = 1; k < inclination_attempt; k++)
             {
-                theta = (i * M_PI / (3 * inclination_attempt));
+                theta = M_PI/3 + (k * M_PI / (4 * inclination_attempt));
                 if (rotation_OW(1, 2) < 0)
                 {
                     theta = -theta;
@@ -620,15 +653,14 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
                 pre_grasp_attemp.orientation.z = q_.z();
 
                 pre_grasp_attemp_vector.push_back(pre_grasp_attemp);
+                obj_pose_vector.push_back(obj_pose_);
             }
         }
     }
 
     else
     {
-        double alpha = 0.0;   // rotazione attorno all'oggetto
-        double theta = 0.0;   // inclinazione rispetto all'oggetto
-        double offset = 0.12; // offset pre-grasp
+        double alpha = 0.0; // rotazione attorno all'oggetto
 
         rotation_start << 0, -1, 0,
             -1, 0, 0,
@@ -667,6 +699,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
                 pre_grasp_attemp.orientation.z = q_.z();
 
                 pre_grasp_attemp_vector.push_back(pre_grasp_attemp);
+                obj_pose_vector.push_back(obj_pose_);
             }
         }
     }
@@ -684,7 +717,6 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
     attach_obj_pose.orientation.x = goal->goal_pose_pick.pose.orientation.x;
     attach_obj_pose.orientation.y = goal->goal_pose_pick.pose.orientation.y;
     attach_obj_pose.orientation.z = goal->goal_pose_pick.pose.orientation.z;
-    float scale_obj = goal->scale_obj;
 
     attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
     move_group_interface->detachObject(object_name);
@@ -709,7 +741,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
 
         pre_grasp_pose = pre_grasp_attemp_vector.at(attempt);
 
-        grasp_pose = obj_pose_;
+        grasp_pose = obj_pose_vector.at(attempt);
         grasp_pose.position.z = grasp_pose.position.z;
         grasp_pose_stamped.pose = grasp_pose;
         grasp_pose_stamped.header.frame_id = "base_link";

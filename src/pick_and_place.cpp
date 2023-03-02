@@ -5,25 +5,18 @@
 #include <actionlib/client/simple_action_client.h>
 #include "grasp_dope/goal_pose_plan_Action.h"
 #include <eigen3/Eigen/Geometry>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <ros/ros.h>
+#include <visp_tracking/tracking_mode_Action.h>
+#include <tf/transform_listener.h>
 
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "client_action");
     ros::NodeHandle nh;
-
-    /* Calling building_scene service */
-    // {
-    //     ROS_INFO_STREAM("--- Activating building_scene service ---");
-    //     ros::service::waitForService("/build_scene");
-    //     std_srvs::Trigger::Request req;
-    //     req = {};
-    //     std_srvs::Trigger::Response res;
-    //     if (!ros::service::call<std_srvs::Trigger::Request, std_srvs::Trigger::Response>("/build_scene", req, res))
-    //     {
-    //         ROS_INFO_STREAM("Error Creating scene...");
-    //         return -1;
-    //     }
-    // }
+    std::string object_name;
 
     /*Activating get_grasp_pose service*/
     std::cout << "Press Enter to Start";
@@ -41,11 +34,10 @@ int main(int argc, char **argv)
     geometry_msgs::PoseStamped grasp_pose = res.refined_pose;
 
     /* Calling planning action server */
-    // actionlib::SimpleActionClient<grasp_dope
-    actionlib::SimpleActionClient<grasp_dope::goal_pose_plan_Action> ac("planning_action", true);
+    actionlib::SimpleActionClient<grasp_dope::goal_pose_plan_Action> ac_planning("planning_action", true);
 
     ROS_INFO("Waiting for action server to start.");
-    ac.waitForServer(); // will wait for infinite time
+    ac_planning.waitForServer(); // will wait for infinite time
     ROS_INFO("Action server started, sending goal.");
     grasp_dope::goal_pose_plan_Goal goal;
 
@@ -64,8 +56,8 @@ int main(int argc, char **argv)
     goal.scale_obj = res.scale_obj;
 
     /* Planning and execute to pre_grasp_pose*/
-    ac.sendGoalAndWait(goal);
-    ROS_INFO_STREAM(ac.getResult()->success);
+    ac_planning.sendGoalAndWait(goal);
+    ROS_INFO_STREAM(ac_planning.getResult()->success);
 
     // ros::spin();
     return 0;

@@ -8,11 +8,14 @@ Panels:
         - /Status1
         - /MotionPlanning1
         - /Pose1
+        - /Camera1
         - /Pose2
         - /PointCloud21
         - /Pose3
         - /Camera2
         - /DepthCloud1/Auto Size1
+        - /TF1
+        - /TF1/Frames1
       Splitter Ratio: 0.5
     Tree Height: 310
   - Class: rviz/Selection
@@ -177,6 +180,10 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
+          push_frame:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           tactile_1:
             Alpha: 1
             Show Axes: false
@@ -325,6 +332,10 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
+          push_frame:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           tactile_1:
             Alpha: 1
             Show Axes: false
@@ -365,19 +376,19 @@ Visualization Manager:
       Shaft Length: 1
       Shaft Radius: 0.05000000074505806
       Shape: Axes
-      Topic: /dope/pose_banana
+      Topic: /push_pose
       Unreliable: false
       Value: true
     - Class: rviz/Camera
-      Enabled: false
+      Enabled: true
       Image Rendering: background and overlay
-      Image Topic: /camera/color/image_raw
+      Image Topic: /dope/rgb_points
       Name: Camera
       Overlay Alpha: 0.5
       Queue Size: 2
       Transport Hint: raw
       Unreliable: false
-      Value: false
+      Value: true
       Visibility:
         Camera: true
         DepthCloud: true
@@ -386,6 +397,7 @@ Visualization Manager:
         MotionPlanning: true
         PointCloud2: true
         Pose: true
+        TF: true
         Value: true
       Zoom Factor: 1
     - Alpha: 1
@@ -449,7 +461,7 @@ Visualization Manager:
       Unreliable: false
       Value: true
     - Class: rviz/Camera
-      Enabled: true
+      Enabled: false
       Image Rendering: background and overlay
       Image Topic: /dope/rgb_points
       Name: Camera
@@ -457,7 +469,7 @@ Visualization Manager:
       Queue Size: 2
       Transport Hint: raw
       Unreliable: false
-      Value: true
+      Value: false
       Visibility:
         Camera: true
         DepthCloud: true
@@ -466,6 +478,7 @@ Visualization Manager:
         MotionPlanning: true
         PointCloud2: true
         Pose: true
+        TF: true
         Value: true
       Zoom Factor: 1
     - Alpha: 1
@@ -504,6 +517,110 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
+    - Class: rviz/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false
+        Base_Jaw_3:
+          Value: false
+        Base_Jaw_4:
+          Value: false
+        WSG-32_Body_2:
+          Value: false
+        base_link:
+          Value: false
+        base_link_gripper:
+          Value: false
+        camera_aligned_depth_to_color_frame:
+          Value: false
+        camera_bottom_screw_frame:
+          Value: false
+        camera_color_frame:
+          Value: false
+        camera_color_optical_frame:
+          Value: false
+        camera_depth_frame:
+          Value: false
+        camera_depth_optical_frame:
+          Value: false
+        camera_link:
+          Value: false
+        end_effector_tool0:
+          Value: false
+        ext_finger_1:
+          Value: false
+        ext_finger_3:
+          Value: false
+        link_b:
+          Value: false
+        link_e:
+          Value: false
+        link_l:
+          Value: false
+        link_r:
+          Value: false
+        link_s:
+          Value: false
+        link_t:
+          Value: false
+        link_u:
+          Value: false
+        push_extension:
+          Value: false
+        push_frame:
+          Value: true
+        tactile_1:
+          Value: false
+        tactile_2:
+          Value: false
+        tool0:
+          Value: false
+        world:
+          Value: false
+      Marker Alpha: 1
+      Marker Scale: 0.30000001192092896
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree:
+        world:
+          base_link:
+            link_s:
+              link_l:
+                link_e:
+                  link_u:
+                    link_r:
+                      link_b:
+                        link_t:
+                          tool0:
+                            base_link_gripper:
+                              WSG-32_Body_2:
+                                Base_Jaw_3:
+                                  ext_finger_1:
+                                    tactile_1:
+                                      {}
+                                Base_Jaw_4:
+                                  ext_finger_3:
+                                    tactile_2:
+                                      push_extension:
+                                        push_frame:
+                                          {}
+                              camera_bottom_screw_frame:
+                                camera_link:
+                                  camera_aligned_depth_to_color_frame:
+                                    camera_color_optical_frame:
+                                      {}
+                                  camera_color_frame:
+                                    {}
+                                  camera_depth_frame:
+                                    camera_depth_optical_frame:
+                                      {}
+                            end_effector_tool0:
+                              {}
+      Update Interval: 0
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -575,4 +692,4 @@ Window Geometry:
     collapsed: true
   Width: 1048
   X: 872
-  Y: 47
+  Y: 27

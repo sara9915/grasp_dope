@@ -166,6 +166,10 @@ Visualization Manager:
           Alpha: 1
           Show Axes: false
           Show Trail: false
+        push_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
       Name: RobotModel
       Robot Description: robot_description
       TF Prefix: ""

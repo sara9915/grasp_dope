@@ -66,7 +66,7 @@ tol_optimization = 0.1
 remove_outliers = True
 
 # Plot parameters
-get_plot = True
+get_plot = False
 sigma_min = -0.001
 sigma_max = 0.001
 

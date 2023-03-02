@@ -70,6 +70,7 @@
   <depend>cv_bridge</depend>
   <depend>dope</depend>
   <depend>slipping_control_common</depend>
+  <depend>visp_tracking</depend>
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
   

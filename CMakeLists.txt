@@ -25,6 +25,7 @@ find_package(catkin REQUIRED COMPONENTS
   slipping_control_common
   tf2
   tf2_ros
+  visp_tracking
 )
 
 ## System dependencies are found with CMake's conventions
@@ -121,7 +122,7 @@ generate_messages(
 catkin_package(
  INCLUDE_DIRS include
 #  LIBRARIES grasp_dope
-   CATKIN_DEPENDS roscpp rospy tf2 tf2_ros std_msgs message_runtime geometry_msgs actionlib_msgs trajectory_msgs wsg_32_common sun_traj_lib cv_bridge slipping_control_common
+   CATKIN_DEPENDS roscpp rospy tf2 tf2_ros std_msgs message_runtime geometry_msgs actionlib_msgs trajectory_msgs wsg_32_common sun_traj_lib cv_bridge slipping_control_common visp_tracking
    #DEPENDS Eigen3
 )
 
