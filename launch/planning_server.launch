@@ -3,13 +3,4 @@
     <node name="planning_server" pkg="grasp_dope" type="planning_server" output="screen" clear_params="true">
         <remap from="joint_states" to="motoman/joint_states"/>
     </node>
-
-        <!-- run grasp_pose_node -->
-    <node name="grasp_pose_node" pkg="grasp_dope" type="grasp_pose_node" output="screen">
-        <!-- <remap from="/dope/pose_banana" to="/dope/pose_obj"/> -->
-    </node>
-
-        <!-- run depth_optimizer -->
-    <node name="depth_optimizer" pkg="grasp_dope" type="depth_optimizer.py" output="screen"/>
-
 </launch>
