@@ -19,7 +19,7 @@
     <include file="$(find yaskawa_moveit_config)/launch/demo.launch" />
 
     <!-- run scene builder node  -->
-    <!-- <node type="scene_builder_node" name="scene_builder_node" pkg="grasp_dope" /> -->
+    <node type="scene_builder_node" name="scene_builder_node" pkg="grasp_dope" />
 
     <!-- run image_transport to convert compressed image in raw image -->
     <node type="republish" name="republish_color" pkg="image_transport" args="compressed in:=/camera/color/image_raw _image_transport:=compressed out:=/camera/color/image_raw2" />

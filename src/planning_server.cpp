@@ -5,6 +5,7 @@
 #include <wsg_32_common/Move.h>
 #include <std_srvs/Empty.h>
 #include <grasp_dope/quintic_traj.h>
+#include <tf/transform_listener.h>
 
 #include <grasp_dope/goal_pose_plan_Action.h>
 #include <actionlib/server/simple_action_server.h>
@@ -40,7 +41,7 @@ moveit::planning_interface::MoveGroupInterface::Plan planning_joint(const geomet
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
 
     move_group_interface.setMaxVelocityScalingFactor(0.05);
-    move_group_interface.setPlanningTime(2);
+    move_group_interface.setPlanningTime(12);
     move_group_interface.setPlannerId("RRTstarkConfigDefault");
 
     success = (move_group_interface.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
@@ -76,10 +77,25 @@ auto planning_cartesian(const geometry_msgs::Pose &target_pose, moveit::planning
 
 auto get_tool_pose(const geometry_msgs::Pose &pose)
 {
+
+    tf::TransformListener listener;
+    tf::StampedTransform transform;
+
+    try
+    {
+        listener.waitForTransform("/end_effector_tool0", "/tool0", ros::Time(0), ros::Duration(3.0));
+        listener.lookupTransform("/end_effector_tool0", "/tool0",
+                                 ros::Time(0), transform);
+    }
+    catch (tf::TransformException ex)
+    {
+        ROS_ERROR("%s", ex.what());
+        ros::Duration(1.0).sleep();
+    }
     Eigen::Isometry3d T_TE; // omogeneous transfrom from tool0 to end-effector_tool0
-    T_TE.translation().x() = 0.0;
-    T_TE.translation().y() = -0.0;
-    T_TE.translation().z() = -0.21;
+    T_TE.translation().x() = transform.getOrigin().getX();
+    T_TE.translation().y() = transform.getOrigin().getY();
+    T_TE.translation().z() = transform.getOrigin().getZ();
 
     Eigen::Quaterniond q_EB(pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
     Eigen::Isometry3d T_EB(q_EB);
@@ -105,13 +121,13 @@ auto get_tool_pose(const geometry_msgs::Pose &pose)
     return start_state_pose;
 }
 
-void attach_obj(std::string obj_id, std::string frame_id, moveit::planning_interface::MoveGroupInterface &move_group_interface, moveit::planning_interface::PlanningSceneInterface &planning_scene_interface, geometry_msgs::Pose pose_obj, float scale_obj)
+auto attach_obj(std::string obj_id, std::string frame_id, moveit::planning_interface::MoveGroupInterface &move_group_interface, moveit::planning_interface::PlanningSceneInterface &planning_scene_interface, geometry_msgs::Pose pose_obj, float scale_obj)
 {
     moveit_msgs::CollisionObject object_to_attach;
 
     scale_obj = scale_obj * mesh_scale;
-    // if (scale_obj > 0.95)
-    //     scale_obj = scale_obj * 0.80;
+    // if (scale_obj > 0.85)
+    //     scale_obj = scale_obj * 0.90;
     Eigen::Vector3d scale(scale_obj, scale_obj, scale_obj);
 
     object_to_attach.id = obj_id;
@@ -119,9 +135,6 @@ void attach_obj(std::string obj_id, std::string frame_id, moveit::planning_inter
     // La posizione del box è definita rispetto alla terna world
     object_to_attach.header.frame_id = frame_id;
 
-    // shapes::Mesh *m = shapes::createMeshFromResource("file:///home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/Apple/Apple_4K/food_apple_01_4k.stl", scale);
-    // shapes::Mesh *m = shapes::createMeshFromResource("file:///home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/banana/banana2_centered.obj", scale);
-    // ROS_INFO_STREAM("file:///home/workstation/dope_ros_ws/src/grasp_dope/scripts/models/banana/banana_16/banana_centered_scaled.obj");
     shapes::Mesh *m = shapes::createMeshFromResource("file://" + mesh_path, scale);
 
     shape_msgs::Mesh mesh;
@@ -140,8 +153,8 @@ void attach_obj(std::string obj_id, std::string frame_id, moveit::planning_inter
     object_to_attach.operation = object_to_attach.ADD;
 
     planning_scene_interface.applyCollisionObject(object_to_attach);
-
-    move_group_interface.attachObject(object_to_attach.id, "end_effector_tool0");
+    return object_to_attach;
+    // move_group_interface.attachObject(object_to_attach.id, "end_effector_tool0");
 }
 
 void execute_trajectory(const moveit_msgs::RobotTrajectory &my_plan, ros::NodeHandle &nh, bool scale)
@@ -218,6 +231,7 @@ void execute_trajectory(const moveit_msgs::RobotTrajectory &my_plan, ros::NodeHa
 
 bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::SimpleActionServer<grasp_dope::goal_pose_plan_Action> *as, ros::NodeHandle *nh, moveit::planning_interface::MoveGroupInterface *move_group_interface, moveit::planning_interface::PlanningSceneInterface *planning_scene_interface, const moveit::core::JointModelGroup *joint_model_group, moveit::core::RobotStatePtr &kinematic_state)
 {
+    float scale_obj = goal->scale_obj;
     // create messages that are used to published feedback/result
     grasp_dope::goal_pose_plan_Feedback feedback;
     grasp_dope::goal_pose_plan_Result result;
@@ -236,306 +250,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
     moveit_msgs::RobotTrajectory plan_post_grasp;
 
     moveit::planning_interface::MoveGroupInterface::Plan plan_place;
-
     moveit_msgs::RobotTrajectory plan_post_place;
-    moveit::planning_interface::MoveGroupInterface::Plan plan_homing;
-
-    std::vector<geometry_msgs::Pose> pre_grasp_attemp_vector;
-    geometry_msgs::Pose pre_grasp_attemp;
-
-    Eigen::Matrix3d rotation_start;
-    Eigen::Matrix3d rotation_alpha;
-    Eigen::Matrix3d rotation_theta;
-
-    double alpha = 0.0;   // rotazione attorno all'oggetto
-    double theta = 0.0;   // inclinazione rispetto all'oggetto
-    double offset = 0.08; // offset pre-grasp
-
-    rotation_start << 0, -1, 0,
-        -1, 0, 0,
-        0, 0, -1;
-    int rotation_attempt = 5;
-    int inclination_attempt = 4;
-    ros::NodeHandle temp;
-    ros::Publisher pre_grasp_attempt_pub = temp.advertise<geometry_msgs::PoseStamped>("/attempt", 1);
-    geometry_msgs::PoseStamped temp_pub;
-
-    for (int i = 0; i < inclination_attempt; i++)
-    {
-        theta = (i * M_PI / (3 * inclination_attempt));
-
-        /* Rotazione attorno all'asse y */
-        rotation_theta << cos(theta), 0, sin(theta),
-            0, 1, 0,
-            -sin(theta), 0, cos(theta);
-
-        for (int k = 0; k < rotation_attempt; k++)
-        {
-            alpha = (k * M_PI / rotation_attempt) - M_PI_2;
-            pre_grasp_attemp.position.x = goal->goal_pose_pick.pose.position.x + offset * sin(theta) * sin(alpha);
-            pre_grasp_attemp.position.y = goal->goal_pose_pick.pose.position.y + offset * sin(theta) * cos(alpha);
-            pre_grasp_attemp.position.z = goal->goal_pose_pick.pose.position.z + offset * cos(theta);
-
-            /* Matrice di rotazione attorno all'asse z */
-            rotation_alpha << cos(alpha), -sin(alpha), 0,
-                sin(alpha), cos(alpha), 0,
-                0, 0, 1;
-
-            Eigen::Quaterniond q_(rotation_start * rotation_alpha * rotation_theta);
-            pre_grasp_attemp.orientation.w = q_.w();
-            pre_grasp_attemp.orientation.x = q_.x();
-            pre_grasp_attemp.orientation.y = q_.y();
-            pre_grasp_attemp.orientation.z = q_.z();
-
-            pre_grasp_attemp_vector.push_back(pre_grasp_attemp);
-        }
-    }
-
-    int attempt = 0;
-    std::vector<std::string> obj_id;
-    obj_id.push_back(object_name);
-
-    while (!success_planning_pp && attempt < pre_grasp_attemp_vector.size())
-    {
-        ROS_INFO_STREAM(attempt + 1 << " ATTEMPT");
-
-        temp_pub.pose = pre_grasp_attemp_vector.at(attempt);
-        temp_pub.header.stamp = ros::Time::now();
-        temp_pub.header.frame_id = "base_link";
-        std::cout << "Press Enter to publish frame";
-        std::cin.ignore();
-        pre_grasp_attempt_pub.publish(temp_pub);
-
-        pre_grasp_pose = pre_grasp_attemp_vector.at(attempt);
-
-        grasp_pose = goal->goal_pose_pick.pose;
-        grasp_pose.orientation = pre_grasp_attemp_vector.at(attempt).orientation;
-
-        post_grasp_pose = pre_grasp_pose;
-
-        place_pose = goal->goal_pose_place.pose;
-        place_pose.orientation = pre_grasp_attemp_vector.at(attempt).orientation;
-
-        ROS_INFO_STREAM("--- Pre-grasp pose --- "
-                        << "\n"
-                        << pre_grasp_pose);
-
-        if (as->isPreemptRequested() || !ros::ok())
-        {
-            ROS_INFO("Preempted");
-            // set the action state to preempted
-            as->setPreempted();
-            success = false;
-            return success;
-        }
-
-        /* Planning to pre-grasp pose */
-        moveit::core::RobotState start_state(*move_group_interface->getCurrentState());
-        move_group_interface->setStartState(start_state);
-
-        plan_pre_grasp = planning_joint(pre_grasp_pose, *move_group_interface);
-
-        ROS_INFO_STREAM("Result planning pre-grasp pose: " << success);
-
-        if (success)
-        {
-            std::cout << "Press Enter to Continue";
-            std::cin.ignore();
-
-            ROS_INFO_STREAM("--- Grasp pose ---"
-                            << "\n"
-                            << grasp_pose);
-
-            /* Planning to grasp pose */
-            start_state.setFromIK(joint_model_group, get_tool_pose(pre_grasp_pose));
-            move_group_interface->setStartState(start_state);
-
-            plan_pick = planning_cartesian(get_tool_pose(grasp_pose), *move_group_interface);
-
-            ROS_INFO_STREAM("Result planning grasp pose: " << success);
-            if (success)
-            {
-                std::cout << "Press Enter to Continue";
-                std::cin.ignore();
-                /* Planning to post grasp pose */
-                ROS_INFO_STREAM("--- Post grasp pose --- "
-                                << "\n"
-                                << post_grasp_pose);
-
-                start_state.setFromIK(joint_model_group, get_tool_pose(grasp_pose));
-                move_group_interface->setStartState(start_state);
-
-                // attach_obj(*move_group_interface, *planning_scene_interface, goal->goal_pose_pick.pose);
-                plan_post_grasp = planning_cartesian(get_tool_pose(post_grasp_pose), *move_group_interface);
-                ROS_INFO_STREAM("Result planning post grasp pose: " << success);
-
-                if (success)
-                {
-                    std::cout << "Press Enter to Continue";
-                    std::cin.ignore();
-                    /* Planning to place pose */
-                    ROS_INFO_STREAM("--- Place pose --- "
-                                    << "\n"
-                                    << place_pose);
-
-                    start_state.setFromIK(joint_model_group, get_tool_pose(post_grasp_pose));
-                    move_group_interface->setStartState(start_state);
-
-                    plan_place = planning_joint(place_pose, *move_group_interface);
-                    ROS_INFO_STREAM("Result planning place pose: " << success);
-
-                    if (success)
-                    {
-                        std::cout << "Planning successfully completed. Press ENTER to continue...";
-                        std::cin.ignore();
-                        move_group_interface->detachObject(object_name);
-                        planning_scene_interface->removeCollisionObjects(obj_id);
-                        success_planning_pp = true;
-                        attempt = 0;
-                    }
-                    else
-                    {
-                        ROS_INFO_STREAM("Try with other pre-grasp pose...");
-                        attempt = attempt + 1;
-                        move_group_interface->detachObject(object_name);
-                        planning_scene_interface->removeCollisionObjects(obj_id);
-                    }
-                }
-                else
-                {
-                    ROS_INFO_STREAM("Try with other pre-grasp pose...");
-                    attempt = attempt + 1;
-                    move_group_interface->detachObject(object_name);
-                    planning_scene_interface->removeCollisionObjects(obj_id);
-                }
-            }
-            else
-            {
-                ROS_INFO_STREAM("Try with other pre-grasp pose...");
-                attempt = attempt + 1;
-            }
-        }
-        else
-        {
-            ROS_INFO_STREAM("Try with other pre-grasp pose...");
-            attempt = attempt + 1;
-        }
-        attempt = attempt + 1;
-    }
-
-    result.success = success;
-    as->setSucceeded(result);
-    bool success_homing = false;
-
-    if (success_planning_pp)
-    {
-        std::cout << "Press Enter to start executing";
-        std::cin.ignore();
-        ROS_INFO_STREAM("Executing trajectory pre_grasp...");
-        execute_trajectory(plan_pre_grasp.trajectory_, *nh, false);
-
-        std::cout << "Press Enter to Continue";
-        std::cin.ignore();
-
-        ROS_INFO_STREAM("Executing trajectory pick...");
-        execute_trajectory(plan_pick, *nh, true);
-        std::cout << "Press Enter to Continue";
-        std::cin.ignore();
-
-        ROS_INFO_STREAM("--- CLOSING GRIPPER ---");
-        ros::service::waitForService("/wsg_32_driver/grasp");
-        wsg_32_common::Move::Request req;
-        wsg_32_common::Move::Response res;
-
-        req.width = 36.0;
-        req.speed = 10.0;
-
-        if (!ros::service::call<wsg_32_common::Move::Request, wsg_32_common::Move::Response>("/wsg_32_driver/grasp", req, res))
-        {
-            ROS_INFO_STREAM("Error activating service move gripper...");
-            return -1;
-        }
-
-        // attach_obj(*move_group_interface, *planning_scene_interface, goal->goal_pose_pick.pose, goal->goal_pose_pick, goal->scale_obj);
-        std::cout << "Press Enter to Continue";
-        std::cin.ignore();
-
-        ROS_INFO_STREAM("Executing trajectory post grasp...");
-        execute_trajectory(plan_post_grasp, *nh, true);
-        std::cout << "Press Enter to Continue";
-        std::cin.ignore();
-
-        ROS_INFO_STREAM("Executing trajectory place...");
-        execute_trajectory(plan_place.trajectory_, *nh, false);
-        std::cout << "Press Enter to Continue";
-        std::cin.ignore();
-
-        ROS_INFO_STREAM("--- OPENING GRIPPER ---");
-        ros::service::waitForService("/wsg_32_driver/homing");
-        std_srvs::Empty::Request req_home;
-        std_srvs::Empty::Response res_home;
-        req_home = {};
-
-        if (!ros::service::call<std_srvs::Empty::Request, std_srvs::Empty::Response>("/wsg_32_driver/homing", req_home, res_home))
-        {
-            ROS_INFO_STREAM("Error activating service move gripper...");
-            return -1;
-        }
-        move_group_interface->detachObject(object_name);
-
-        std::cout << "Press Enter to Continue";
-        std::cin.ignore();
-
-        move_group_interface->setStartStateToCurrentState();
-        post_place_pose = place_pose;
-        post_place_pose.position.z = post_place_pose.position.z + 0.11;
-        plan_post_place = planning_cartesian(get_tool_pose(post_place_pose), *move_group_interface);
-        if (success)
-        {
-            std::cout << "Press Enter to Continue";
-            std::cin.ignore();
-            execute_trajectory(plan_post_place, *nh, true);
-            std::cout << "Press Enter to Continue";
-            std::cin.ignore();
-            move_group_interface->setStartStateToCurrentState();
-            move_group_interface->setJointValueTarget(homing);
-            move_group_interface->setMaxVelocityScalingFactor(0.05);
-            move_group_interface->setMaxAccelerationScalingFactor(0.05);
-
-            success_homing = (move_group_interface->plan(plan_homing) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
-            if (success_homing)
-            {
-                std::cout << "Press Enter to return Home";
-                std::cin.ignore();
-                execute_trajectory(plan_homing.trajectory_, *nh, false);
-            }
-        }
-        else
-        {
-            ROS_INFO_STREAM("Error planning");
-        }
-    }
-
-    return true;
-}
-
-bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::SimpleActionServer<grasp_dope::goal_pose_plan_Action> *as, ros::NodeHandle *nh, moveit::planning_interface::MoveGroupInterface *move_group_interface, moveit::planning_interface::PlanningSceneInterface *planning_scene_interface, const moveit::core::JointModelGroup *joint_model_group, moveit::core::RobotStatePtr &kinematic_state)
-{
-    float scale_obj = goal->scale_obj;
-    // create messages that are used to published feedback/result
-    grasp_dope::goal_pose_plan_Feedback feedback;
-    grasp_dope::goal_pose_plan_Result result;
-    // bool success = true;
-
-    geometry_msgs::Pose pre_grasp_pose;
-    geometry_msgs::Pose grasp_pose;
-    geometry_msgs::Pose post_grasp_pose;
-
-    moveit::core::RobotState start_state(*move_group_interface->getCurrentState());
-
-    moveit::planning_interface::MoveGroupInterface::Plan plan_pre_grasp;
-    moveit_msgs::RobotTrajectory plan_pick;
-    moveit_msgs::RobotTrajectory plan_post_grasp;
 
     moveit::planning_interface::MoveGroupInterface::Plan plan_homing;
 
@@ -549,7 +264,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
     ros::NodeHandle temp;
     ros::Publisher pre_grasp_attempt_pub = temp.advertise<geometry_msgs::PoseStamped>("/attempt", 1);
     ros::Publisher pose_obj_pub = temp.advertise<geometry_msgs::PoseStamped>("/pose_obj_refined", 1);
-    // pose_obj_pub.publish(goal->goal_pose_pick.pose);
+
     geometry_msgs::PoseStamped temp_pub;
     geometry_msgs::PoseStamped grasp_pose_stamped;
 
@@ -564,8 +279,8 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
     // }
 
     std::vector<geometry_msgs::Pose> obj_pose_vector;
-    geometry_msgs::Pose obj_pose_= goal->goal_pose_pick.pose;
-    
+    geometry_msgs::Pose obj_pose_ = goal->goal_pose_pick.pose;
+
     double theta = 0.0;   // inclinazione rispetto all'oggetto
     double offset = 0.12; // offset pre-grasp
 
@@ -611,13 +326,13 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
         float min_ = cad_dimensions.at(2) / 2 - cad_dimensions.at(2) / 4;
         float max_ = cad_dimensions.at(2) / 2 + cad_dimensions.at(2) / 4;
 
-        for (int i = round(points_attempt/2); i < points_attempt; i++)
+        for (int i = round(points_attempt / 2); i < points_attempt; i++)
         {
-            attempt_position.push_back((min_ + i * (max_ - min_) / points_attempt)-cad_dimensions.at(2)/2);
+            attempt_position.push_back((min_ + i * (max_ - min_) / points_attempt) - cad_dimensions.at(2) / 2);
         }
-        for (int i = 0; i <= round(points_attempt/2); i++)
+        for (int i = 0; i <= round(points_attempt / 2); i++)
         {
-            attempt_position.push_back((min_ + i * (max_ - min_) / points_attempt)-cad_dimensions.at(2)/2); 
+            attempt_position.push_back((min_ + i * (max_ - min_) / points_attempt) - cad_dimensions.at(2) / 2);
         }
 
         for (int i = 0; i < attempt_position.size(); i++)
@@ -629,13 +344,13 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             obj_pose_.position.y = obj_pose_.position.y + tmp(1);
             obj_pose_.position.z = obj_pose_.position.z + tmp(2);
             obj_pose_.position.z = obj_pose_.position.z + 0.015;
-            
+
             pre_grasp_attemp.position = obj_pose_.position;
             pre_grasp_attemp.position.z = pre_grasp_attemp.position.z + offset;
 
             for (int k = 1; k < inclination_attempt; k++)
             {
-                theta = M_PI/3 + (k * M_PI / (4 * inclination_attempt));
+                theta = M_PI / 3 + (k * M_PI / (4 * inclination_attempt));
                 if (rotation_OW(1, 2) < 0)
                 {
                     theta = -theta;
@@ -718,8 +433,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
     attach_obj_pose.orientation.y = goal->goal_pose_pick.pose.orientation.y;
     attach_obj_pose.orientation.z = goal->goal_pose_pick.pose.orientation.z;
 
-    attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
-    move_group_interface->detachObject(object_name);
+    auto object_ = attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
 
     // std::string topic_dope_pose = "/dope/pose_" + object_name;
     // auto dope_pose = ros::topic::waitForMessage<geometry_msgs::PoseStamped>(topic_dope_pose);
@@ -745,11 +459,14 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
         grasp_pose.position.z = grasp_pose.position.z;
         grasp_pose_stamped.pose = grasp_pose;
         grasp_pose_stamped.header.frame_id = "base_link";
+        grasp_pose_stamped.header.stamp = ros::Time::now();
 
         pose_obj_pub.publish(grasp_pose_stamped);
         grasp_pose.orientation = pre_grasp_attemp_vector.at(attempt).orientation;
 
         post_grasp_pose = pre_grasp_pose;
+        place_pose = goal->goal_pose_place.pose;
+        place_pose.orientation = pre_grasp_attemp_vector.at(attempt).orientation;
 
         ROS_INFO_STREAM("--- Pre-grasp pose --- "
                         << "\n"
@@ -793,7 +510,8 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             {
                 std::cout << "Press Enter to Continue";
                 std::cin.ignore();
-                attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
+                // attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
+                move_group_interface->attachObject(object_.id, "end_effector_tool0");
                 /* Planning to post grasp pose */
                 ROS_INFO_STREAM("--- Post grasp pose --- "
                                 << "\n"
@@ -809,9 +527,31 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
                 {
                     std::cout << "Press Enter to Continue";
                     std::cin.ignore();
+                    /* Planning to place pose */
+                    ROS_INFO_STREAM("--- Place pose --- "
+                                    << "\n"
+                                    << place_pose);
 
-                    success_planning_pp = true;
-                    attempt = 0;
+                    start_state.setFromIK(joint_model_group, get_tool_pose(post_grasp_pose));
+                    move_group_interface->setStartState(start_state);
+
+                    plan_place = planning_joint(place_pose, *move_group_interface);
+                    ROS_INFO_STREAM("Result planning place pose: " << success);
+
+                    if (success)
+                    {
+                        std::cout << "Planning successfully completed. Press ENTER to continue...";
+                        std::cin.ignore();
+                        move_group_interface->detachObject(object_name);
+                        success_planning_pp = true;
+                        attempt = 0;
+                    }
+                    else
+                    {
+                        ROS_INFO_STREAM("Try with other pre-grasp pose...");
+                        attempt = attempt + 1;
+                        move_group_interface->detachObject(object_name);
+                    }
                 }
                 else
                 {
@@ -825,8 +565,6 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             {
                 ROS_INFO_STREAM("Try with other pre-grasp pose...");
                 attempt = attempt + 1;
-                move_group_interface->detachObject(object_name);
-                // planning_scene_interface->removeCollisionObjects(obj_id);
             }
         }
         else
@@ -835,6 +573,7 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
             attempt = attempt + 1;
         }
     }
+
     move_group_interface->detachObject(object_name);
     // planning_scene_interface->removeCollisionObjects(obj_id);
     result.success = success;
@@ -863,46 +602,57 @@ bool executeCB_no_place(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, act
         slipping_control.slipping_avoidance();
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
-        attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
+        // attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
+        move_group_interface->attachObject(object_.id, "end_effector_tool0");
 
         ROS_INFO_STREAM("Executing trajectory post grasp...");
         execute_trajectory(plan_post_grasp, *nh, true);
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
 
-        // Parameters for attach obj
-        // geometry_msgs::Pose attach_obj_pose;
-        // attach_obj_pose.position.x = post_grasp_pose.position.x;
-        // attach_obj_pose.position.y = post_grasp_pose.position.y;
-        // attach_obj_pose.position.z = post_grasp_pose.position.z;
-        // attach_obj_pose.orientation.w = goal->goal_pose_pick.pose.orientation.w;
-        // attach_obj_pose.orientation.x = goal->goal_pose_pick.pose.orientation.x;
-        // attach_obj_pose.orientation.y = goal->goal_pose_pick.pose.orientation.y;
-        // attach_obj_pose.orientation.z = goal->goal_pose_pick.pose.orientation.z;
-        // float scale_obj = goal->scale_obj;
+        ROS_INFO_STREAM("Executing trajectory place...");
+        execute_trajectory(plan_place.trajectory_, *nh, false);
+        std::cout << "Press Enter to Continue";
+        std::cin.ignore();
+
+        ROS_INFO_STREAM("--- OPENING GRIPPER ---");
+        slipping_control.home();
+
+        move_group_interface->detachObject(object_name);
+
+        std::cout << "Press Enter to Continue";
+        std::cin.ignore();
 
         move_group_interface->setStartStateToCurrentState();
-        move_group_interface->setJointValueTarget(homing);
-        move_group_interface->setMaxVelocityScalingFactor(0.05);
-        move_group_interface->setMaxAccelerationScalingFactor(0.05);
-
-        success_homing = (move_group_interface->plan(plan_homing) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
-        if (success_homing)
+        post_place_pose = place_pose;
+        post_place_pose.position.z = post_place_pose.position.z + 0.11;
+        plan_post_place = planning_cartesian(get_tool_pose(post_place_pose), *move_group_interface);
+        if (success)
         {
-            std::cout << "Press Enter to return Home";
+            std::cout << "Press Enter to Continue";
             std::cin.ignore();
-            execute_trajectory(plan_homing.trajectory_, *nh, false);
-            std::cout << "Press Enter to open gripper";
+            execute_trajectory(plan_post_place, *nh, true);
+            std::cout << "Press Enter to Continue";
             std::cin.ignore();
-            slipping_control.home();
-        }
+            move_group_interface->setStartStateToCurrentState();
+            move_group_interface->setJointValueTarget(homing);
+            move_group_interface->setMaxVelocityScalingFactor(0.05);
+            move_group_interface->setMaxAccelerationScalingFactor(0.05);
 
+            success_homing = (move_group_interface->plan(plan_homing) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+            if (success_homing)
+            {
+                std::cout << "Press Enter to return Home";
+                std::cin.ignore();
+                execute_trajectory(plan_homing.trajectory_, *nh, false);
+            }
+        }
         else
         {
             ROS_INFO_STREAM("Error planning");
         }
     }
-    move_group_interface->detachObject(object_name);
+
     planning_scene_interface->removeCollisionObjects(obj_id);
     success_planning_pp = false;
     return true;
@@ -965,7 +715,7 @@ int main(int argc, char **argv)
     box_size = ros::topic::waitForMessage<vision_msgs::Detection3DArray>("/dope/detected_objects");
 
     /* Creazione del ros action */
-    actionlib::SimpleActionServer<grasp_dope::goal_pose_plan_Action> as(nh, "planning_action", boost::bind(&executeCB_no_place, _1, &as, &nh, &move_group_interface, &planning_scene_interface, joint_model_group, kinematic_state), false); // NodeHandle instance must be created before this line. Otherwise strange error occurs.
+    actionlib::SimpleActionServer<grasp_dope::goal_pose_plan_Action> as(nh, "planning_action", boost::bind(&executeCB, _1, &as, &nh, &move_group_interface, &planning_scene_interface, joint_model_group, kinematic_state), false); // NodeHandle instance must be created before this line. Otherwise strange error occurs.
     as.start();
 
     ros::waitForShutdown();

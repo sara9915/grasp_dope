@@ -89,16 +89,16 @@ void buildScene()
   double table_place_larghezza = 0.33;
 
   // table yaskawa
-  {
-    geometry_msgs::PoseStamped pose;
-    pose.header.frame_id = "world";
-    pose.pose.orientation.w = 1.0;
-    pose.pose.position.x = 0;
-    pose.pose.position.y = -Table_DY / 4 - 0.03; // 0
-    pose.pose.position.z = -Table_DZ / 2;
-    addBOX(*planning_scene_interface, Table_DX, Table_DY, Table_DZ, pose,
-           "obst_1");
-  }
+  // {
+  //   geometry_msgs::PoseStamped pose;
+  //   pose.header.frame_id = "world";
+  //   pose.pose.orientation.w = 1.0;
+  //   pose.pose.position.x = 0;
+  //   pose.pose.position.y = -Table_DY / 4 - 0.03; // 0
+  //   pose.pose.position.z = -Table_DZ / 2;
+  //   addBOX(*planning_scene_interface, Table_DX, Table_DY, Table_DZ, pose,
+  //          "obst_1");
+  // }
 
   // table place
   {
