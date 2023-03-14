@@ -28,7 +28,7 @@
 
 bool success_planning_pp = false;
 bool success;
-double rate = 50; // Hz
+double rate = 40; // Hz
 vision_msgs::Detection3DArrayConstPtr box_size;
 std::string object_name;
 double mesh_scale;
@@ -41,7 +41,7 @@ moveit::planning_interface::MoveGroupInterface::Plan planning_joint(const geomet
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
 
     move_group_interface.setMaxVelocityScalingFactor(0.05);
-    move_group_interface.setPlanningTime(12);
+    move_group_interface.setPlanningTime(18);
     move_group_interface.setPlannerId("RRTstarkConfigDefault");
 
     success = (move_group_interface.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
@@ -77,7 +77,6 @@ auto planning_cartesian(const geometry_msgs::Pose &target_pose, moveit::planning
 
 auto get_tool_pose(const geometry_msgs::Pose &pose)
 {
-
     tf::TransformListener listener;
     tf::StampedTransform transform;
 
@@ -126,8 +125,8 @@ auto attach_obj(std::string obj_id, std::string frame_id, moveit::planning_inter
     moveit_msgs::CollisionObject object_to_attach;
 
     scale_obj = scale_obj * mesh_scale;
-    // if (scale_obj > 0.85)
-    //     scale_obj = scale_obj * 0.90;
+    // if (scale_obj > 0.80)
+    //     scale_obj = 0.80;
     Eigen::Vector3d scale(scale_obj, scale_obj, scale_obj);
 
     object_to_attach.id = obj_id;
@@ -220,7 +219,7 @@ void execute_trajectory(const moveit_msgs::RobotTrajectory &my_plan, ros::NodeHa
             for (int i = 0; i < qi.size(); i++)
             {
                 joint_cmd.position.at(i) = quintic_q(t, coeff, i);
-                joint_cmd.velocity.at(i) = quintic_qdot(t, coeff, i);
+                joint_cmd.velocity.at(i) = 0.0; // quintic_qdot(t, coeff, i);
             }
 
             joint_cmd_pub.publish(joint_cmd);
@@ -240,6 +239,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
     geometry_msgs::Pose pre_grasp_pose;
     geometry_msgs::Pose grasp_pose;
     geometry_msgs::Pose post_grasp_pose;
+    geometry_msgs::Pose pre_place_pose;
     geometry_msgs::Pose place_pose;
     geometry_msgs::Pose post_place_pose;
 
@@ -249,13 +249,15 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
     moveit_msgs::RobotTrajectory plan_pick;
     moveit_msgs::RobotTrajectory plan_post_grasp;
 
-    moveit::planning_interface::MoveGroupInterface::Plan plan_place;
+    moveit::planning_interface::MoveGroupInterface::Plan plan_pre_place;
     moveit_msgs::RobotTrajectory plan_post_place;
+    moveit_msgs::RobotTrajectory plan_place;
 
     moveit::planning_interface::MoveGroupInterface::Plan plan_homing;
 
     std::vector<geometry_msgs::Pose> pre_grasp_attemp_vector;
     geometry_msgs::Pose pre_grasp_attemp;
+    std::vector<geometry_msgs::Pose> place_attempt;
 
     Eigen::Matrix3d rotation_start;
     Eigen::Matrix3d rotation_alpha;
@@ -367,6 +369,9 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                 pre_grasp_attemp.orientation.y = q_.y();
                 pre_grasp_attemp.orientation.z = q_.z();
 
+                place_attempt.push_back(pre_grasp_attemp);
+
+
                 pre_grasp_attemp_vector.push_back(pre_grasp_attemp);
                 obj_pose_vector.push_back(obj_pose_);
             }
@@ -380,7 +385,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         rotation_start << 0, -1, 0,
             -1, 0, 0,
             0, 0, -1;
-        int rotation_attempt = 8;
+        int rotation_attempt = 4;
         int inclination_attempt = 4;
         for (int i = 2; i < inclination_attempt; i++)
         {
@@ -394,9 +399,9 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
             for (int k = 0; k < rotation_attempt; k++)
             {
                 if (k < rotation_attempt / 2)
-                    alpha = (k * M_PI / rotation_attempt); //- M_PI_2;
+                    alpha = -(k * M_PI / rotation_attempt); //- M_PI_2;
                 else
-                    alpha = (k - floor(rotation_attempt / 2) * M_PI / rotation_attempt) - M_PI_2;
+                    alpha = -(k - floor(rotation_attempt / 2)) * M_PI / rotation_attempt - M_PI_2;
 
                 pre_grasp_attemp.position.x = obj_pose_.position.x + offset * sin(theta) * sin(alpha);
                 pre_grasp_attemp.position.y = obj_pose_.position.y + offset * sin(theta) * cos(alpha);
@@ -412,6 +417,14 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                 pre_grasp_attemp.orientation.x = q_.x();
                 pre_grasp_attemp.orientation.y = q_.y();
                 pre_grasp_attemp.orientation.z = q_.z();
+
+                if (k == rotation_attempt / 2 - 1)
+                {
+                    for (int l = 0; l < rotation_attempt; l++)
+                    {
+                        place_attempt.push_back(pre_grasp_attemp);
+                    }
+                }
 
                 pre_grasp_attemp_vector.push_back(pre_grasp_attemp);
                 obj_pose_vector.push_back(obj_pose_);
@@ -465,8 +478,12 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         grasp_pose.orientation = pre_grasp_attemp_vector.at(attempt).orientation;
 
         post_grasp_pose = pre_grasp_pose;
-        place_pose = goal->goal_pose_place.pose;
-        place_pose.orientation = pre_grasp_attemp_vector.at(attempt).orientation;
+
+        place_pose.position = goal->goal_pose_place.pose.position;
+        place_pose.orientation = place_attempt.at(attempt).orientation;
+
+        pre_place_pose = place_pose;
+        pre_place_pose.position.z = pre_place_pose.position.z + 0.10;
 
         ROS_INFO_STREAM("--- Pre-grasp pose --- "
                         << "\n"
@@ -500,7 +517,8 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                             << grasp_pose);
 
             /* Planning to grasp pose */
-            start_state.setFromIK(joint_model_group, get_tool_pose(pre_grasp_pose));
+            // start_state.setFromIK(joint_model_group, get_tool_pose(pre_grasp_pose));
+            start_state.setJointGroupPositions(joint_model_group, plan_pre_grasp.trajectory_.joint_trajectory.points.back().positions);
             move_group_interface->setStartState(start_state);
 
             plan_pick = planning_cartesian(get_tool_pose(grasp_pose), *move_group_interface);
@@ -517,7 +535,8 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                                 << "\n"
                                 << post_grasp_pose);
 
-                start_state.setFromIK(joint_model_group, get_tool_pose(grasp_pose));
+                // start_state.setFromIK(joint_model_group, get_tool_pose(grasp_pose));
+                start_state.setJointGroupPositions(joint_model_group, plan_pick.joint_trajectory.points.back().positions);
                 move_group_interface->setStartState(start_state);
 
                 plan_post_grasp = planning_cartesian(get_tool_pose(post_grasp_pose), *move_group_interface);
@@ -528,29 +547,53 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                     std::cout << "Press Enter to Continue";
                     std::cin.ignore();
                     /* Planning to place pose */
-                    ROS_INFO_STREAM("--- Place pose --- "
+                    ROS_INFO_STREAM("--- Pre-Place pose --- "
                                     << "\n"
-                                    << place_pose);
+                                    << pre_place_pose);
 
-                    start_state.setFromIK(joint_model_group, get_tool_pose(post_grasp_pose));
+                    // start_state.setFromIK(joint_model_group, get_tool_pose(post_grasp_pose));
+                    start_state.setJointGroupPositions(joint_model_group, plan_post_grasp.joint_trajectory.points.back().positions);
                     move_group_interface->setStartState(start_state);
 
-                    plan_place = planning_joint(place_pose, *move_group_interface);
+                    plan_pre_place = planning_joint(pre_place_pose, *move_group_interface);
                     ROS_INFO_STREAM("Result planning place pose: " << success);
-
                     if (success)
                     {
                         std::cout << "Planning successfully completed. Press ENTER to continue...";
                         std::cin.ignore();
-                        move_group_interface->detachObject(object_name);
-                        success_planning_pp = true;
-                        attempt = 0;
+
+                        ROS_INFO_STREAM("--- Place pose --- "
+                                        << "\n"
+                                        << place_pose);
+
+                        // start_state.setFromIK(joint_model_group, get_tool_pose(post_grasp_pose));
+                        start_state.setJointGroupPositions(joint_model_group, plan_pre_place.trajectory_.joint_trajectory.points.back().positions);
+                        move_group_interface->setStartState(start_state);
+
+                        plan_place = planning_cartesian(get_tool_pose(place_pose), *move_group_interface);
+
+                        if (success)
+                        {
+                            std::cout << "Planning successfully completed. Press ENTER to continue...";
+                            std::cin.ignore();
+
+                            move_group_interface->detachObject(object_name);
+                            success_planning_pp = true;
+                            attempt = 0;
+                        }
+                        else
+                        {
+                            ROS_INFO_STREAM("Try with other pre-grasp pose...");
+                            attempt = attempt + 1;
+                            move_group_interface->detachObject(object_name);
+                        }
                     }
                     else
                     {
                         ROS_INFO_STREAM("Try with other pre-grasp pose...");
                         attempt = attempt + 1;
                         move_group_interface->detachObject(object_name);
+                        // planning_scene_interface->removeCollisionObjects(obj_id);
                     }
                 }
                 else
@@ -572,6 +615,56 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
             ROS_INFO_STREAM("Try with other pre-grasp pose...");
             attempt = attempt + 1;
         }
+    }
+
+    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI PRE GRASP: " << plan_pre_grasp.trajectory_.joint_trajectory.points.size());
+    std::cout << "ultimo pre grasp: " << std::endl;
+    for (auto element : plan_pre_grasp.trajectory_.joint_trajectory.points[plan_pre_grasp.trajectory_.joint_trajectory.points.size() - 1].positions)
+    {
+        std::cout << element << std::endl;
+    }
+
+    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI GRASP: " << plan_pick.joint_trajectory.points.size());
+    std::cout << "primo grasp: " << std::endl;
+    for (auto element : plan_pick.joint_trajectory.points[0].positions)
+    {
+        std::cout << element << std::endl;
+    }
+    std::cout << "ultimo grasp: " << std::endl;
+    for (auto element : plan_pick.joint_trajectory.points[plan_pick.joint_trajectory.points.size() - 1].positions)
+    {
+        std::cout << element << std::endl;
+    }
+
+    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI POST GRASP: " << plan_post_grasp.joint_trajectory.points.size());
+    std::cout << "primo post grasp: " << std::endl;
+    for (auto element : plan_post_grasp.joint_trajectory.points[0].positions)
+    {
+        std::cout << element << std::endl;
+    }
+    std::cout << "ultimo post grasp: " << std::endl;
+    for (auto element : plan_post_grasp.joint_trajectory.points[plan_post_grasp.joint_trajectory.points.size() - 1].positions)
+    {
+        std::cout << element << std::endl;
+    }
+
+    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI PLACE: " << plan_pre_place.trajectory_.joint_trajectory.points.size());
+    std::cout << "primo pre place: " << std::endl;
+    for (auto element : plan_pre_place.trajectory_.joint_trajectory.points[0].positions)
+    {
+        std::cout << element << std::endl;
+    }
+    std::cout << "ultimo pre place: " << std::endl;
+    for (auto element : plan_pre_place.trajectory_.joint_trajectory.points.back().positions)
+    {
+        std::cout << element << std::endl;
+    }
+
+    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI PLACE: " << plan_place.joint_trajectory.points.size());
+    std::cout << "primo place: " << std::endl;
+    for (auto element : plan_place.joint_trajectory.points[0].positions)
+    {
+        std::cout << element << std::endl;
     }
 
     move_group_interface->detachObject(object_name);
@@ -610,8 +703,13 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
 
+        ROS_INFO_STREAM("Executing trajectory pre place...");
+        execute_trajectory(plan_pre_place.trajectory_, *nh, false);
+        std::cout << "Press Enter to Continue";
+        std::cin.ignore();
+
         ROS_INFO_STREAM("Executing trajectory place...");
-        execute_trajectory(plan_place.trajectory_, *nh, false);
+        execute_trajectory(plan_place, *nh, false);
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
 
@@ -717,6 +815,7 @@ int main(int argc, char **argv)
     /* Creazione del ros action */
     actionlib::SimpleActionServer<grasp_dope::goal_pose_plan_Action> as(nh, "planning_action", boost::bind(&executeCB, _1, &as, &nh, &move_group_interface, &planning_scene_interface, joint_model_group, kinematic_state), false); // NodeHandle instance must be created before this line. Otherwise strange error occurs.
     as.start();
+    ROS_INFO_STREAM("Waiting for action client..");
 
     ros::waitForShutdown();
 

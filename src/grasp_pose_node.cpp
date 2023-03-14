@@ -28,11 +28,7 @@ std::string object_name;
 
 geometry_msgs::PoseStamped estimated_pose_msgs[SAMPLE_AVERAGE];
 sensor_msgs::Image depth_msgs[SAMPLE_AVERAGE];
-
-geometry_msgs::PoseStamped estimated_pose_msg;
 geometry_msgs::PoseStamped grasp_pose_msg;
-
-cv::Mat depth_cv[SAMPLE_AVERAGE];
 
 bool read_depth = false;
 bool read_pose = false;
@@ -42,15 +38,15 @@ bool optimizer = true;
 
 void estimate_pose_callback(const geometry_msgs::PoseStampedConstPtr &msg)
 {
+  if (sample_pose == SAMPLE_AVERAGE)
+  {
+    read_pose = true;
+    sample_pose = 0;
+  }
   if (sample_pose < SAMPLE_AVERAGE)
   {
     estimated_pose_msgs[sample_pose].pose = msg->pose;
     sample_pose = sample_pose + 1;
-    if (sample_pose == SAMPLE_AVERAGE)
-    {
-      read_pose = true;
-      sample_pose = 0;
-    }
   }
 
   // ROS_INFO_STREAM("Estimate Pose: " << sample_pose);
@@ -58,8 +54,14 @@ void estimate_pose_callback(const geometry_msgs::PoseStampedConstPtr &msg)
 
 void depth_callback(const sensor_msgs::ImageConstPtr &msg)
 {
+  if (sample_depth == SAMPLE_AVERAGE)
+  {
+    read_depth = true;
+    sample_depth = 0;
+  }
   if (sample_pose > 0 && sample_depth < SAMPLE_AVERAGE)
   {
+
     depth_msgs[sample_depth].data = msg->data;
     depth_msgs[sample_depth].step = msg->step;
     depth_msgs[sample_depth].is_bigendian = msg->is_bigendian;
@@ -67,11 +69,6 @@ void depth_callback(const sensor_msgs::ImageConstPtr &msg)
     depth_msgs[sample_depth].encoding = msg->encoding;
     depth_msgs[sample_depth].width = msg->width;
     sample_depth = sample_depth + 1;
-    if (sample_depth == SAMPLE_AVERAGE)
-    {
-      read_depth = true;
-      sample_depth = 0;
-    }
   }
 
   // ROS_INFO_STREAM("Estimate depth: " << sample_depth);
@@ -85,6 +82,7 @@ void get_real_depth(sensor_msgs::Image &msg, cv::Mat &current_depth)
 
 void average_pose(geometry_msgs::PoseStamped &estimated_pose_msg)
 {
+  // std::cout << estimated_pose_msg.pose.position.x << ", " << estimated_pose_msg.pose.position.y << ", " << estimated_pose_msg.pose.position.z << std::endl;
 
   for (int i = 0; i < SAMPLE_AVERAGE; i++)
   {
@@ -107,9 +105,8 @@ void average_pose(geometry_msgs::PoseStamped &estimated_pose_msg)
   estimated_pose_msg.pose.orientation.z = estimated_pose_msg.pose.orientation.z / SAMPLE_AVERAGE;
 }
 
-void average_depth(float depth_matrix[HEIGHT * WIDTH])
+void average_depth(float depth_matrix[HEIGHT * WIDTH], cv::Mat depth_cv[SAMPLE_AVERAGE])
 {
-
   for (int i = 0; i < SAMPLE_AVERAGE; i++)
   {
     get_real_depth(depth_msgs[i], depth_cv[i]);
@@ -121,6 +118,7 @@ void average_depth(float depth_matrix[HEIGHT * WIDTH])
     {
       for (int k = 0; k < SAMPLE_AVERAGE; k++)
       {
+        
         depth_matrix[i * WIDTH + j] = depth_matrix[i * WIDTH + j] + depth_cv[k].at<uint16_t>(i, j) * DEPTH_SCALE;
       }
       depth_matrix[i * WIDTH + j] = depth_matrix[i * WIDTH + j] / SAMPLE_AVERAGE;
@@ -200,12 +198,16 @@ bool get_grasp_pose(grasp_dope::desired_grasp_pose_activate::Request &req,
     ROS_INFO_STREAM(estimated_pose_msg);
 
     float depth_matrix[HEIGHT * WIDTH];
+    for (int i = 0; i < HEIGHT*WIDTH; i++)
+    {
+      depth_matrix[i] = 0.0;
+    }
+    cv::Mat depth_cv[SAMPLE_AVERAGE];
     ROS_INFO_STREAM("Calculating average for depth...");
-    average_depth(depth_matrix);
+    average_depth(depth_matrix, depth_cv);
 
     if (optimizer == true)
     {
-
       calculate_pose(estimated_pose_msg);
       ROS_INFO_STREAM("Grasp pose NOT OPTIMIZED: ");
       ROS_INFO_STREAM(grasp_pose_msg);
@@ -281,9 +283,9 @@ int main(int argc, char **argv)
   // spinner.start();
 
   ros::param::get("/dope/object_of_interest", object_name);
-  ros::Subscriber aligned_depth_sub = n.subscribe("/camera/aligned_depth_to_color/image_raw", 1, &depth_callback);
+  ros::Subscriber aligned_depth_sub = n.subscribe("/camera/aligned_depth_to_color/image_raw", SAMPLE_AVERAGE, &depth_callback);
   std::string topic_dope_pose = "/dope/pose_" + object_name;
-  ros::Subscriber estimated_pose_sub = n.subscribe(topic_dope_pose, 1, &estimate_pose_callback);
+  ros::Subscriber estimated_pose_sub = n.subscribe(topic_dope_pose, SAMPLE_AVERAGE, &estimate_pose_callback);
 
   /* This service is used to activate this node: it must be activated only if manipulator is stopped*/
   ros::ServiceServer service = n.advertiseService("/get_grasp_pose_service", get_grasp_pose);

@@ -86,7 +86,7 @@ void buildScene()
   // dimensioni tavolo place
   double table_place_altezza = 0.76;
   double table_place_lunghezza = 0.62;
-  double table_place_larghezza = 0.33;
+  double table_place_larghezza = 0.53;
 
   // table yaskawa
   // {
@@ -105,9 +105,9 @@ void buildScene()
     geometry_msgs::PoseStamped pose;
     pose.header.frame_id = "world";
     pose.pose.orientation.w = 1.0;
-    pose.pose.position.x = Table_DX / 2 + 0.11 + table_place_larghezza / 2;
+    pose.pose.position.x = Table_DX / 2 + table_place_larghezza / 2;
     pose.pose.position.y = -table_place_lunghezza / 4; // 0
-    pose.pose.position.z = -table_place_altezza / 2 - 0.08;
+    pose.pose.position.z = -table_place_altezza / 2 - 0.08 + 0.24;
     addBOX(*planning_scene_interface, table_place_larghezza, table_place_lunghezza, table_place_altezza, pose,
            "obst_10");
   }
