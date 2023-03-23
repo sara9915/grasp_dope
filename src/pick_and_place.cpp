@@ -59,7 +59,7 @@ int main(int argc, char **argv)
     goal.goal_pose_pick.pose = grasp_pose.pose;
     goal.goal_pose_pick.pose.position.z = goal.goal_pose_pick.pose.position.z;
     goal.goal_pose_pick.pose.position.y = goal.goal_pose_pick.pose.position.y;
-    goal.goal_pose_pick.pose.position.x = goal.goal_pose_pick.pose.position.x + 0.01;
+    goal.goal_pose_pick.pose.position.x = goal.goal_pose_pick.pose.position.x; //+ 0.015;
 
     /* Place pose definition */
     goal.goal_pose_place.pose.position.y = -0.28;

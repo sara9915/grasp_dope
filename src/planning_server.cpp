@@ -40,7 +40,7 @@ moveit::planning_interface::MoveGroupInterface::Plan planning_joint(const geomet
     move_group_interface.setPoseTarget(target_pose, "end_effector_tool0");
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
 
-    move_group_interface.setMaxVelocityScalingFactor(0.05);
+    move_group_interface.setMaxVelocityScalingFactor(0.1); // 0.05
     move_group_interface.setPlanningTime(18);
     move_group_interface.setPlannerId("RRTstarkConfigDefault");
 
@@ -125,8 +125,8 @@ auto attach_obj(std::string obj_id, std::string frame_id, moveit::planning_inter
     moveit_msgs::CollisionObject object_to_attach;
 
     scale_obj = scale_obj * mesh_scale;
-    // if (scale_obj > 0.80)
-    //     scale_obj = 0.80;
+    if (scale_obj > 0.80)
+        scale_obj = 0.80;
     Eigen::Vector3d scale(scale_obj, scale_obj, scale_obj);
 
     object_to_attach.id = obj_id;
@@ -179,7 +179,7 @@ void execute_trajectory(const moveit_msgs::RobotTrajectory &my_plan, ros::NodeHa
     double tf = 0;
     double t = 0;
     double t0 = 0;
-    double scale_factor = 10.0;
+    double scale_factor = 5.0; // 10
 
     ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI: " << num_points_traj);
     std::vector<sensor_msgs::JointState> joint_cmd_vect;
@@ -230,6 +230,15 @@ void execute_trajectory(const moveit_msgs::RobotTrajectory &my_plan, ros::NodeHa
 
 bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::SimpleActionServer<grasp_dope::goal_pose_plan_Action> *as, ros::NodeHandle *nh, moveit::planning_interface::MoveGroupInterface *move_group_interface, moveit::planning_interface::PlanningSceneInterface *planning_scene_interface, const moveit::core::JointModelGroup *joint_model_group, moveit::core::RobotStatePtr &kinematic_state)
 {
+    /* Clear octomap to start planning */
+    ros::service::waitForService("/clear_octomap");
+    std_srvs::Empty::Request req;
+    std_srvs::Empty::Response res;
+    if (!ros::service::call<std_srvs::Empty::Request, std_srvs::Empty::Response>("/clear_octomap", req, res))
+    {
+        ROS_INFO_STREAM("Error activating service clear_octomap...");
+        return -1;
+    }
     float scale_obj = goal->scale_obj;
     // create messages that are used to published feedback/result
     grasp_dope::goal_pose_plan_Feedback feedback;
@@ -269,16 +278,6 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
 
     geometry_msgs::PoseStamped temp_pub;
     geometry_msgs::PoseStamped grasp_pose_stamped;
-
-    /* Clear octomap to start planning */
-    // ros::service::waitForService("/clear_octomap");
-    // std_srvs::Empty::Request req;
-    // std_srvs::Empty::Response res;
-    // if (!ros::service::call<std_srvs::Empty::Request, std_srvs::Empty::Response>("/clear_octomap", req, res))
-    // {
-    //     ROS_INFO_STREAM("Error activating service clear_octomap...");
-    //     return -1;
-    // }
 
     std::vector<geometry_msgs::Pose> obj_pose_vector;
     geometry_msgs::Pose obj_pose_ = goal->goal_pose_pick.pose;
@@ -371,7 +370,6 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
 
                 place_attempt.push_back(pre_grasp_attemp);
 
-
                 pre_grasp_attemp_vector.push_back(pre_grasp_attemp);
                 obj_pose_vector.push_back(obj_pose_);
             }
@@ -385,7 +383,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         rotation_start << 0, -1, 0,
             -1, 0, 0,
             0, 0, -1;
-        int rotation_attempt = 4;
+        int rotation_attempt = 6;
         int inclination_attempt = 4;
         for (int i = 2; i < inclination_attempt; i++)
         {
@@ -401,7 +399,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                 if (k < rotation_attempt / 2)
                     alpha = -(k * M_PI / rotation_attempt); //- M_PI_2;
                 else
-                    alpha = -(k - floor(rotation_attempt / 2)) * M_PI / rotation_attempt - M_PI_2;
+                    alpha = (k - floor(rotation_attempt / 2)) * M_PI / rotation_attempt + M_PI / rotation_attempt;
 
                 pre_grasp_attemp.position.x = obj_pose_.position.x + offset * sin(theta) * sin(alpha);
                 pre_grasp_attemp.position.y = obj_pose_.position.y + offset * sin(theta) * cos(alpha);
@@ -446,7 +444,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
     attach_obj_pose.orientation.y = goal->goal_pose_pick.pose.orientation.y;
     attach_obj_pose.orientation.z = goal->goal_pose_pick.pose.orientation.z;
 
-    auto object_ = attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
+    // auto object_ = attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
 
     // std::string topic_dope_pose = "/dope/pose_" + object_name;
     // auto dope_pose = ros::topic::waitForMessage<geometry_msgs::PoseStamped>(topic_dope_pose);
@@ -529,6 +527,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                 std::cout << "Press Enter to Continue";
                 std::cin.ignore();
                 // attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
+                auto object_ = attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
                 move_group_interface->attachObject(object_.id, "end_effector_tool0");
                 /* Planning to post grasp pose */
                 ROS_INFO_STREAM("--- Post grasp pose --- "
@@ -559,7 +558,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                     ROS_INFO_STREAM("Result planning place pose: " << success);
                     if (success)
                     {
-                        std::cout << "Planning successfully completed. Press ENTER to continue...";
+                        std::cout << "Press ENTER to continue...";
                         std::cin.ignore();
 
                         ROS_INFO_STREAM("--- Place pose --- "
@@ -586,6 +585,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                             ROS_INFO_STREAM("Try with other pre-grasp pose...");
                             attempt = attempt + 1;
                             move_group_interface->detachObject(object_name);
+                            planning_scene_interface->removeCollisionObjects(obj_id);
                         }
                     }
                     else
@@ -593,7 +593,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                         ROS_INFO_STREAM("Try with other pre-grasp pose...");
                         attempt = attempt + 1;
                         move_group_interface->detachObject(object_name);
-                        // planning_scene_interface->removeCollisionObjects(obj_id);
+                        planning_scene_interface->removeCollisionObjects(obj_id);
                     }
                 }
                 else
@@ -601,7 +601,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
                     ROS_INFO_STREAM("Try with other pre-grasp pose...");
                     attempt = attempt + 1;
                     move_group_interface->detachObject(object_name);
-                    // planning_scene_interface->removeCollisionObjects(obj_id);
+                    planning_scene_interface->removeCollisionObjects(obj_id);
                 }
             }
             else
@@ -617,57 +617,58 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         }
     }
 
-    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI PRE GRASP: " << plan_pre_grasp.trajectory_.joint_trajectory.points.size());
-    std::cout << "ultimo pre grasp: " << std::endl;
-    for (auto element : plan_pre_grasp.trajectory_.joint_trajectory.points[plan_pre_grasp.trajectory_.joint_trajectory.points.size() - 1].positions)
-    {
-        std::cout << element << std::endl;
-    }
+    // ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI PRE GRASP: " << plan_pre_grasp.trajectory_.joint_trajectory.points.size());
+    // std::cout << "ultimo pre grasp: " << std::endl;
+    // for (auto element : plan_pre_grasp.trajectory_.joint_trajectory.points[plan_pre_grasp.trajectory_.joint_trajectory.points.size() - 1].positions)
+    // {
+    //     std::cout << element << std::endl;
+    // }
 
-    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI GRASP: " << plan_pick.joint_trajectory.points.size());
-    std::cout << "primo grasp: " << std::endl;
-    for (auto element : plan_pick.joint_trajectory.points[0].positions)
-    {
-        std::cout << element << std::endl;
-    }
-    std::cout << "ultimo grasp: " << std::endl;
-    for (auto element : plan_pick.joint_trajectory.points[plan_pick.joint_trajectory.points.size() - 1].positions)
-    {
-        std::cout << element << std::endl;
-    }
+    // ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI GRASP: " << plan_pick.joint_trajectory.points.size());
+    // std::cout << "primo grasp: " << std::endl;
+    // for (auto element : plan_pick.joint_trajectory.points[0].positions)
+    // {
+    //     std::cout << element << std::endl;
+    // }
+    // std::cout << "ultimo grasp: " << std::endl;
+    // for (auto element : plan_pick.joint_trajectory.points[plan_pick.joint_trajectory.points.size() - 1].positions)
+    // {
+    //     std::cout << element << std::endl;
+    // }
 
-    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI POST GRASP: " << plan_post_grasp.joint_trajectory.points.size());
-    std::cout << "primo post grasp: " << std::endl;
-    for (auto element : plan_post_grasp.joint_trajectory.points[0].positions)
-    {
-        std::cout << element << std::endl;
-    }
-    std::cout << "ultimo post grasp: " << std::endl;
-    for (auto element : plan_post_grasp.joint_trajectory.points[plan_post_grasp.joint_trajectory.points.size() - 1].positions)
-    {
-        std::cout << element << std::endl;
-    }
+    // ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI POST GRASP: " << plan_post_grasp.joint_trajectory.points.size());
+    // std::cout << "primo post grasp: " << std::endl;
+    // for (auto element : plan_post_grasp.joint_trajectory.points[0].positions)
+    // {
+    //     std::cout << element << std::endl;
+    // }
+    // std::cout << "ultimo post grasp: " << std::endl;
+    // for (auto element : plan_post_grasp.joint_trajectory.points[plan_post_grasp.joint_trajectory.points.size() - 1].positions)
+    // {
+    //     std::cout << element << std::endl;
+    // }
 
-    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI PLACE: " << plan_pre_place.trajectory_.joint_trajectory.points.size());
-    std::cout << "primo pre place: " << std::endl;
-    for (auto element : plan_pre_place.trajectory_.joint_trajectory.points[0].positions)
-    {
-        std::cout << element << std::endl;
-    }
-    std::cout << "ultimo pre place: " << std::endl;
-    for (auto element : plan_pre_place.trajectory_.joint_trajectory.points.back().positions)
-    {
-        std::cout << element << std::endl;
-    }
+    // ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI PLACE: " << plan_pre_place.trajectory_.joint_trajectory.points.size());
+    // std::cout << "primo pre place: " << std::endl;
+    // for (auto element : plan_pre_place.trajectory_.joint_trajectory.points[0].positions)
+    // {
+    //     std::cout << element << std::endl;
+    // }
+    // std::cout << "ultimo pre place: " << std::endl;
+    // for (auto element : plan_pre_place.trajectory_.joint_trajectory.points.back().positions)
+    // {
+    //     std::cout << element << std::endl;
+    // }
 
-    ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI PLACE: " << plan_place.joint_trajectory.points.size());
-    std::cout << "primo place: " << std::endl;
-    for (auto element : plan_place.joint_trajectory.points[0].positions)
-    {
-        std::cout << element << std::endl;
-    }
+    // ROS_INFO_STREAM("NUMERO DI PUNTI PIANIFICATI PLACE: " << plan_place.joint_trajectory.points.size());
+    // std::cout << "primo place: " << std::endl;
+    // for (auto element : plan_place.joint_trajectory.points[0].positions)
+    // {
+    //     std::cout << element << std::endl;
+    // }
 
     move_group_interface->detachObject(object_name);
+    auto object_ = attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
     // planning_scene_interface->removeCollisionObjects(obj_id);
     result.success = success;
     as->setSucceeded(result);
@@ -695,6 +696,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         slipping_control.slipping_avoidance();
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
+
         // attach_obj(object_name, "base_link", *move_group_interface, *planning_scene_interface, attach_obj_pose, scale_obj);
         move_group_interface->attachObject(object_.id, "end_effector_tool0");
 
@@ -709,7 +711,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
         std::cin.ignore();
 
         ROS_INFO_STREAM("Executing trajectory place...");
-        execute_trajectory(plan_place, *nh, false);
+        execute_trajectory(plan_place, *nh, true);
         std::cout << "Press Enter to Continue";
         std::cin.ignore();
 
