@@ -2,7 +2,7 @@
     <!-- run dope -->
     <include file="$(find dope)/launch/dope.launch" />
 
-    <!-- run realsense camera
+    <!-- run realsense camera -->
     <include file="$(find realsense2_camera)/launch/rs_camera.launch">
         <arg name="align_depth" value="true" />
         <arg name="depth_width" value="640" />
@@ -13,7 +13,7 @@
         <arg name="color_fps" value="30" />
         <arg name="clip_distance" value="0.8" />
         <arg name="filters" value="pointcloud" />
-    </include> -->
+    </include>
 
     <!-- run yaskawa moveit configuration -->
     <include file="$(find yaskawa_moveit_config)/launch/demo.launch" />
@@ -22,8 +22,8 @@
     <node type="scene_builder_node" name="scene_builder_node" pkg="grasp_dope" />
 
     <!-- run image_transport to convert compressed image in raw image -->
-    <node type="republish" name="republish_color" pkg="image_transport" args="compressed in:=/camera/color/image_raw _image_transport:=compressed out:=/camera/color/image_raw2" />
-    <node type="republish" name="republish_aligned_depth" pkg="image_transport" args="compressed in:=/camera/aligned_depth_to_color/image_raw _image_transport:=compressed out:=/camera/aligned_depth_to_color/image_raw2" />
+    <!-- <node type="republish" name="republish_color" pkg="image_transport" args="compressed in:=/camera/color/image_raw _image_transport:=compressed out:=/camera/color/image_raw2" />
+    <node type="republish" name="republish_aligned_depth" pkg="image_transport" args="compressed in:=/camera/aligned_depth_to_color/image_raw _image_transport:=compressed out:=/camera/aligned_depth_to_color/image_raw2" /> -->
     <!-- run rviz -->
     <node type="rviz" name="rviz" pkg="rviz" args="-d $(find grasp_dope)/rviz/octomap.rviz" />
 

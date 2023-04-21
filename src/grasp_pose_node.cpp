@@ -19,7 +19,7 @@
 #define WIDTH 640
 #define HEIGHT 480
 #define DEPTH_SCALE 0.001
-#define SAMPLE_AVERAGE 20
+#define SAMPLE_AVERAGE 1
 
 int sample_pose = 0;
 int sample_depth = 0;
