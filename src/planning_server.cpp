@@ -689,7 +689,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
 
         ROS_INFO_STREAM("Executing trajectory pick...");
         execute_trajectory(plan_pick, *nh, true);
-        std::cout << "Press Enter to Continue with grasp";
+        std::cout << "Press Enter to Continue with grasp pppppppppppppp";
         std::cin.ignore();
 
         slipping_control.grasp(grasp_force);
@@ -725,7 +725,7 @@ bool executeCB(const grasp_dope::goal_pose_plan_GoalConstPtr &goal, actionlib::S
 
         move_group_interface->setStartStateToCurrentState();
         post_place_pose = place_pose;
-        post_place_pose.position.z = post_place_pose.position.z + 0.11;
+        post_place_pose.position.z = post_place_pose.position.z + 0.08;
         plan_post_place = planning_cartesian(get_tool_pose(post_place_pose), *move_group_interface);
         if (success)
         {

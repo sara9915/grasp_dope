@@ -59,12 +59,12 @@ int main(int argc, char **argv)
     goal.goal_pose_pick.pose = grasp_pose.pose;
     goal.goal_pose_pick.pose.position.z = goal.goal_pose_pick.pose.position.z;
     goal.goal_pose_pick.pose.position.y = goal.goal_pose_pick.pose.position.y;
-    goal.goal_pose_pick.pose.position.x = goal.goal_pose_pick.pose.position.x; //+ 0.015;
+    goal.goal_pose_pick.pose.position.x = goal.goal_pose_pick.pose.position.x + 0.007;
 
     /* Place pose definition */
-    goal.goal_pose_place.pose.position.y = -0.28;
+    goal.goal_pose_place.pose.position.y = -0.28 - 0.04 + 0.12;
     goal.goal_pose_place.pose.position.x = 0.50;
-    goal.goal_pose_place.pose.position.z = 0.05 - 0.08 + 0.24;
+    goal.goal_pose_place.pose.position.z = 0.253;//0.05 - 0.08 + 0.24;
 
     goal.scaled_cuboid_dimensions = res.scaled_cuboid_dimensions;
     goal.scale_obj = res.scale_obj;

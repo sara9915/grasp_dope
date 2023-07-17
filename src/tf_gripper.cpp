@@ -16,11 +16,11 @@ void executeCB_gripper(const sensor_msgs::JointState::ConstPtr &msg)
     double base_jaw_4_x = ORIGIN_ / 2 - position / 2;
     double base_jaw_3_x = -ORIGIN_ / 2 + position / 2;
 
-    static tf2_ros::StaticTransformBroadcaster static_broadcaster;
+    // static tf2_ros::StaticTransformBroadcaster static_broadcaster;
 
     // WGS-32_Body_2 to Base_Jaw_4
 
-    wsg_jaw4.header.stamp = ros::Time::now();
+    wsg_jaw4.header.stamp = msg->header.stamp; //ros::Time::now();
     wsg_jaw4.header.frame_id = "WSG-32_Body_2";
     wsg_jaw4.child_frame_id = "Base_Jaw_4";
     wsg_jaw4.transform.translation.x = base_jaw_4_x; // 0.002499;
@@ -34,7 +34,7 @@ void executeCB_gripper(const sensor_msgs::JointState::ConstPtr &msg)
 
     // WGS-32_Body_2 to Base_Jaw_3
 
-    wsg_jaw3.header.stamp = ros::Time::now();
+    wsg_jaw3.header.stamp = msg->header.stamp; //ros::Time::now();
     wsg_jaw3.header.frame_id = "WSG-32_Body_2";
     wsg_jaw3.child_frame_id = "Base_Jaw_3";
     wsg_jaw3.transform.translation.x = base_jaw_3_x; // 0.059;
@@ -60,7 +60,7 @@ void executeCB_full(const sensor_msgs::JointState::ConstPtr &msg, ros::Publisher
     full_joints.name.push_back("left_joint");
     full_joints.position.push_back(wsg_jaw3.transform.translation.x);
     full_joints.position.push_back(wsg_jaw4.transform.translation.x);
-    full_joints.header.stamp = ros::Time::now();
+    full_joints.header.stamp = msg->header.stamp; //ros::Time::now();
     full_joints_pub->publish(full_joints);
 }
 

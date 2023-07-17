@@ -24,6 +24,8 @@ import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
+index_render = 0
+
 ### USER PARAMETERS ###
 # camera width, height and intrinsics
 width_ = 640
@@ -150,8 +152,8 @@ def convert_from_uvd(v, u, d, fx, fy, cx, cy):
 
 
 def virtual_depth_map(sigma):
-    global virtual_depth_array
-
+    global virtual_depth_array, index_render
+    index_render = index_render +1
     obj_mesh = nvisii.entity.get(object_name)
 
     x = estimated_pose.pose.position.x
